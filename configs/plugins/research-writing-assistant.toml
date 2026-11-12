@@ -1,0 +1,36 @@
+[plugins.research-writing-assistant]
+marketplaces = ["codex", "claude", "copilot"]
+icon = "config:../icons/research-writing-assistant.png"
+repo = "https://github.com/Norman-bury/research-writing-skill.git"
+ref = "main"
+layout = "selective"
+required = ["skills"]
+operations = [
+    { action = "copy", from = "skills", to = "skills" },
+    { action = "copy", from = "scripts", to = "scripts", optional = true },
+    { action = "copy", from = "hooks", to = "hooks", optional = true },
+    { action = "copy", from = "plan-template", to = "plan-template", optional = true },
+    { action = "copy", from = "templates", to = "templates", optional = true },
+    { action = "copy", from = "latex-templates", to = "latex-templates", optional = true },
+    { action = "remove", paths = [
+        "hooks/hooks-cursor.json",
+        "scripts/check_skill_integrity.ps1",
+    ] },
+]
+
+[plugins.research-writing-assistant.metadata]
+description = "面向中文科研论文的AI写作助手: 支持头脑风暴、章节写作、文献综述、Python图表、LaTeX输出"
+author = { name = "Norman-bury" }
+homepage = "https://github.com/Norman-bury/research-writing-skill"
+repository = "https://github.com/Norman-bury/research-writing-skill"
+license = "MIT"
+keywords = [
+    "research",
+    "writing",
+    "thesis",
+    "paper",
+    "academic",
+    "chinese",
+    "latex",
+    "literature-review",
+]

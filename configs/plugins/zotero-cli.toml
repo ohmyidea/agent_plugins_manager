@@ -1,0 +1,20 @@
+[plugins.zotero-cli]
+marketplaces = ["codex", "claude", "copilot"]
+icon = "config:../icons/zotero-cli.png"
+repo = "https://github.com/Agents365-ai/zotero-cli-ai.git"
+ref = "main"
+layout = "selective"
+required = ["skills/zotero-cli/SKILL.md"]
+operations = [
+    { action = "copy", from = "skill", to = "skills" },
+    { action = "copy", from = "README_CN.md", to = "README.md" },
+    { action = "copy", from = "LICENSE", to = "LICENSE" },
+]
+
+[plugins.zotero-cli.metadata]
+description = "Zotero command-line interface for managing references."
+author = { name = "Agents365-ai" }
+homepage = "https://github.com/Agents365-ai/zotero-cli-ai"
+repository = "https://github.com/Agents365-ai/zotero-cli-ai"
+license = "AGPL-3.0"
+keywords = ["academic", "research", "zotero", "cli"]

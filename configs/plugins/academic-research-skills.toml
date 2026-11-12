@@ -1,0 +1,68 @@
+[plugins.academic-research-skills]
+marketplaces = ["codex", "claude", "copilot"]
+icon = "config:../icons/academic-research-skills.png"
+repo = "https://github.com/Imbad0202/academic-research-skills.git"
+ref = "main"
+layout = "selective"
+required = [
+    "skills/academic-paper-reviewer/SKILL.md",
+    "skills/academic-paper/SKILL.md",
+    "skills/academic-pipeline/SKILL.md",
+    "skills/deep-research/SKILL.md",
+    "skills/sr-screener/SKILL.md",
+]
+operations = [
+    { action = "copy", from = "LICENSE", to = "LICENSE", optional = true },
+    { action = "copy", from = ".gitattributes", to = ".gitattributes", optional = true },
+    { action = "copy", from = "MODE_REGISTRY.md", to = "MODE_REGISTRY.md", optional = true },
+    { action = "copy", from = "requirements-pdf-content-classifier.txt", to = "requirements-pdf-content-classifier.txt", optional = true },
+    { action = "copy", from = "agents", to = "agents", optional = true },
+    { action = "copy", from = "commands", to = "commands", optional = true },
+    { action = "copy", from = "hooks", to = "hooks", optional = true },
+    { action = "copy", from = "scripts", to = "scripts", optional = true },
+    { action = "copy", from = "shared", to = "shared", optional = true },
+    { action = "remove", paths = [
+        "scripts/fixtures",
+        "scripts/test_*.py",
+        "scripts/*/tests",
+        "scripts/_ci_pytest_manifest.toml",
+        "scripts/run_ci_pytest_manifest.py",
+    ] },
+    # Keep each complete skill at its standard plugin path.
+    { action = "copy", from = "academic-paper", to = "skills/academic-paper" },
+    { action = "copy", from = "academic-paper-reviewer", to = "skills/academic-paper-reviewer" },
+    { action = "copy", from = "academic-pipeline", to = "skills/academic-pipeline" },
+    { action = "copy", from = "deep-research", to = "skills/deep-research" },
+    { action = "copy", from = "sr-screener", to = "skills/sr-screener" },
+    # Adapt references in packaged commands and support files, outside the skill trees.
+    { action = "replace_regex", paths = [
+        "commands/**/*.md",
+        "agents/**/*.md",
+        "hooks/**/*.json",
+        "hooks/**/*.sh",
+        "scripts/**/*.py",
+        "scripts/**/*.json",
+        "scripts/**/*.sh",
+        "shared/**/*.md",
+        "shared/**/*.json",
+    ], old = '(?<![\w./-])(\$\{CLAUDE_PLUGIN_ROOT\}/|(?:\.\.?/)*)(academic-paper-reviewer|academic-paper|academic-pipeline|deep-research|sr-screener)(?=/)', new = '\1skills/\2' },
+    { action = "replace_regex", paths = ["scripts/**/*.py"], old = '(\b(?:REPO|REPO_ROOT|root)\s*/\s*)"(academic-paper-reviewer|academic-paper|academic-pipeline|deep-research|sr-screener)"(?=\s*/)', new = '\1"skills" / "\2"' },
+]
+
+[plugins.academic-research-skills.metadata]
+description = "Production-grade academic research pipeline: research → write → review → revise → finalize."
+author = { name = "Cheng-I Wu" }
+homepage = "https://github.com/Imbad0202/academic-research-skills"
+repository = "https://github.com/Imbad0202/academic-research-skills"
+license = "CC-BY-NC-4.0"
+keywords = [
+    "academic",
+    "research",
+    "writing",
+    "review",
+    "deep-research",
+    "literature-review",
+    "systematic-review",
+    "peer-review",
+    "scholarly-publishing",
+]

@@ -1,0 +1,33 @@
+[plugins.academic-research-suite]
+marketplaces = ["codex", "claude", "copilot"]
+icon = "config:../icons/academic-research-suite.png"
+repo = "https://github.com/Imbad0202/academic-research-skills-codex.git"
+ref = "main"
+layout = "selective"
+required = ["skills/academic-research-suite/SKILL.md"]
+operations = [
+    { action = "copy", from = "LICENSE", to = "LICENSE", optional = true },
+    { action = "copy", from = "skills", to = "skills", optional = true },
+    # Older checkouts only provide the materialized plugin copy.
+    { action = "copy", from = "plugins/ars-codex/skills/academic-research-suite", to = ".suite-fallback", optional = true },
+    { action = "move", from = ".suite-fallback", to = "skills/academic-research-suite", optional = true, skip_existing = true },
+    { action = "remove", paths = [".suite-fallback"] },
+]
+
+[plugins.academic-research-suite.metadata]
+description = "Production-grade academic research pipeline (Codex): research → write → review → revise → finalize."
+author = { name = "Cheng-I Wu" }
+homepage = "https://github.com/Imbad0202/academic-research-skills-codex"
+repository = "https://github.com/Imbad0202/academic-research-skills-codex"
+license = "CC-BY-NC-4.0"
+keywords = [
+    "academic",
+    "research",
+    "writing",
+    "review",
+    "deep-research",
+    "literature-review",
+    "systematic-review",
+    "peer-review",
+    "scholarly-publishing",
+]

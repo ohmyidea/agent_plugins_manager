@@ -1,0 +1,40 @@
+[plugins.nature-skills]
+marketplaces = ["codex", "claude", "copilot"]
+icon = "config:../icons/nature-skills.png"
+repo = "https://github.com/Yuan1z0825/nature-skills.git"
+ref = "main"
+layout = "selective"
+required = ["skills/nature-shared/SKILL.md"]
+operations = [
+    { action = "copy", from = "skills", to = "skills" },
+    { action = "remove", paths = [
+        "skills/*/tests",
+        "skills/*/evals",
+        "skills/*/README.md",
+        "skills/*/README_EN.md",
+        "skills/*/CHANGELOG.md",
+        "skills/nature-downloader/docs",
+        "skills/nature-figure/assets/chart-atlas",
+        "skills/nature-figure/assets/gallery",
+        "skills/nature-paper-trans/assets/banner.png",
+    ] },
+    # Keep upstream setup documentation when available.
+    { action = "copy", from = "skills/nature-academic-search/README.md", to = "skills/nature-academic-search/README.md", optional = true },
+    { action = "copy", from = "skills/nature-downloader/README.md", to = "skills/nature-downloader/README.md", optional = true },
+]
+
+[plugins.nature-skills.metadata]
+description = "A growing collection of academic workflow bundles for producing work at Nature-journal standard."
+author = { name = "Yuan1z0825" }
+homepage = "https://github.com/Yuan1z0825/nature-skills"
+repository = "https://github.com/Yuan1z0825/nature-skills"
+license = "Apache-2.0"
+keywords = [
+    "nature",
+    "academic",
+    "science",
+    "figure",
+    "writing",
+    "citation",
+    "publication",
+]

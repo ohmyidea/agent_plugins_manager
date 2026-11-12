@@ -1,0 +1,36 @@
+[plugins.paper-spine]
+marketplaces = ["codex", "claude", "copilot"]
+icon = "config:../icons/paper-spine.png"
+repo = "https://github.com/WUBING2023/PaperSpine.git"
+ref = "main"
+layout = "selective"
+required = [
+    "claude/skills/paper-spine/SKILL.md",
+    "codex/skills/paper-spine/SKILL.md",
+]
+operations = [
+    { action = "copy", from = "dist/claude", to = "claude" },
+    { action = "copy", from = "dist/codex", to = "codex" },
+    { action = "copy", from = "README.md", to = "README.md" },
+    { action = "copy", from = "LICENSE", to = "LICENSE" },
+]
+
+[plugins.paper-spine.manifests]
+"claude/.claude-plugin/plugin.json" = "template"
+"claude/plugin.json" = "template"
+"codex/.codex-plugin/plugin.json" = "template"
+
+[plugins.paper-spine.metadata]
+description = "Contribution-first, reviewer-aware academic paper and report writing system for Claude Code."
+author = { name = "WUBING2023" }
+homepage = "https://github.com/WUBING2023/PaperSpine"
+repository = "https://github.com/WUBING2023/PaperSpine"
+license = "MIT"
+keywords = [
+    "academic-writing",
+    "paper-writing",
+    "latex",
+    "research",
+    "reports",
+    "competition-writing",
+]
