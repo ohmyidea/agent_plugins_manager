@@ -51,7 +51,7 @@ icon = "config:../icons/example.png"
 | paper-spine | 选择性导入 | 分别导入 `dist/claude` 和 `dist/codex`，将清单写入各自的子目录 |
 | zotero-cli | 选择性导入 | 导入 `skill/` 下的 `zotero-cli` 技能 |
 
-默认配方沿用原脚本的上游仓库、分支和 marketplace 元数据。默认版本取指向实际检出提交的 Git 标签（去除数字版本前的 `v` 或 `V`），无匹配标签时取检出提交的七位 SHA。需要固定版本时可在配方中设置 `version`。缺少插件清单模板时，工具直接从配方生成清单。缺少项目的 .gitignore 模板时，使用随包附带的版本。
+默认配方沿用原脚本的上游仓库、分支和 marketplace 元数据。在 `[plugins.<name>.metadata]` 中填写 `version` 可以指定插件版本。已有的顶层 `version` 需要移到这个表中。省略时使用实际检出提交的前七位 SHA，即使 `ref` 指定的是标签也是如此。缺少插件清单模板时，工具直接从配方生成清单。缺少项目的 .gitignore 模板时，使用随包附带的版本。
 
 ## 接入新插件
 
@@ -78,6 +78,7 @@ operations = [
 
 [plugins.example.metadata]
 description = "Example research workflow"
+version = "1.2.0"
 ```
 
 ```bash
@@ -125,7 +126,7 @@ print(result.commit)
 
 Codex 的 `interface` 由生成器根据插件名称、简介、作者、主页和图标推导。
 
-可以在配置目录的 `template/` 下提供平台模板。对应文件为 `.codex-plugin/plugin.json`、`.claude-plugin/plugin.json` 和 `plugin.json`。当版本不符合 SemVer 时，Codex 和 Copilot 清单使用 `0.0.0+git.<sha>`，Claude 保留上游版本。公开上架所需的审核信息和链接应由发布者提供。
+可以在配置目录的 `template/` 下提供平台模板。对应文件为 `.codex-plugin/plugin.json`、`.claude-plugin/plugin.json` 和 `plugin.json`。三个平台生成的插件清单都使用配方指定的版本或默认的七位 SHA。`preserve` 模式沿用源清单。公开上架所需的审核信息和链接应由发布者提供。
 
 - [OpenAI Docs 清单字段](https://developers.openai.com/plugins/deploy/submission#manifest-fields)
 - [Claude Code 清单参考](https://code.claude.com/docs/en/plugins-reference)
@@ -149,7 +150,7 @@ python3 -m plugins_manager generate --type codex --type copilot
 
 生成器会为 Codex 市场条目补齐分类和安装策略字段，默认分类为 `Productivity`。
 
-条目的来源路径相对于 marketplace 根目录。例如 PaperSpine 的 Claude 和 Copilot 条目指向 `./plugins/paper-spine/claude`，Codex 条目指向 `./plugins/paper-spine/codex`。重新生成时，匹配条目的来源路径和配方提供的目录元数据会更新。现有安装策略、额外字段和其他插件条目会保留。
+条目的来源路径相对于 marketplace 根目录。例如 PaperSpine 的 Claude 和 Copilot 条目指向 `./plugins/paper-spine/claude`，Codex 条目指向 `./plugins/paper-spine/codex`。重新生成时，匹配条目的来源路径和配方提供的目录元数据会更新。Claude 和 Copilot 条目的版本取自磁盘上的插件清单。插件尚未生成时，条目使用配方中显式指定的版本。Codex 从插件清单读取版本。现有安装策略、额外字段和其他插件条目会保留。
 
 ## 生成、更新与发布
 

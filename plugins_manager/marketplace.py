@@ -7,14 +7,14 @@ from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 
 from .config import PluginSpec
-from .manifests import DEFAULT_CODEX_CATEGORY, PLATFORM_PATHS, SEMVER, manifest_layout
+from .manifests import DEFAULT_CODEX_CATEGORY, PLATFORM_PATHS, manifest_layout
 from .utils.json_io import overlay, read_json_object
 from .utils.tree import SyncError, Tree, exists
 
 MARKETPLACE_PATHS = {platform: paths.marketplace for platform, paths in PLATFORM_PATHS.items()}
 
 
-def plugin_entry(spec: PluginSpec, kind: str) -> dict | None:
+def plugin_entry(spec: PluginSpec, kind: str, *, tree: Tree | None = None) -> dict | None:
     if kind not in spec.marketplaces:
         return None
     roots = set()
@@ -28,7 +28,8 @@ def plugin_entry(spec: PluginSpec, kind: str) -> dict | None:
         raise SyncError(f"Plugin {spec.name!r} has multiple manifests for {kind}")
 
     plugin_root, = roots
-    path = "./" + (PurePosixPath("plugins", spec.name) / plugin_root).as_posix()
+    local = PurePosixPath("plugins", spec.name) / plugin_root
+    path = f"./{local.as_posix()}"
     metadata = overlay(spec.metadata, spec.manifest_fields.get(kind, {}))
     if kind == "codex":
         entry = {
@@ -46,8 +47,13 @@ def plugin_entry(spec: PluginSpec, kind: str) -> dict | None:
     for field in ("description", "author", "homepage"):
         if field in metadata:
             entry[field] = metadata[field]
-    if spec.version is not None and (kind != "copilot" or SEMVER.fullmatch(spec.version)):
-        entry["version"] = spec.version
+    version = spec.configured_version
+    if tree is not None:
+        manifest = (local / PLATFORM_PATHS[kind].manifest).as_posix()
+        if exists(tree.path(manifest)):
+            version = read_json_object(tree.file(manifest)).get("version")
+    if isinstance(version, str) and version.strip():
+        entry["version"] = version
     return entry
 
 
@@ -70,6 +76,8 @@ def merge_entries(
     removed = len(by_name) < len(current)
     for entry in entries:
         existing = by_name.setdefault(entry["name"], {})
+        if not codex and "version" not in entry:
+            existing.pop("version", None)
         for key, value in entry.items():
             if key == "policy" and isinstance(existing.get(key), dict):
                 value = overlay(value, existing[key])
@@ -107,7 +115,7 @@ def write_marketplaces(
             codex = kind == "codex"
             entries = [
                 entry for spec in specs
-                if (entry := plugin_entry(spec, kind)) is not None
+                if (entry := plugin_entry(spec, kind, tree=tree)) is not None
             ]
             excluded = {spec.name for spec in specs if kind not in spec.marketplaces}
             if not entries and not excluded:

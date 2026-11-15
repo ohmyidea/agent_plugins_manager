@@ -42,7 +42,7 @@ class ManifestTests(unittest.TestCase):
                 "copilot": {"extensions": {"com.github.copilot": {}}},
             },
         )
-        write_manifests(self.root, spec, self.stage, COMMIT[:7], COMMIT)
+        write_manifests(self.root, spec, self.stage, COMMIT[:7])
 
         codex = self.read(".codex-plugin/plugin.json")
         self.assertEqual(codex["skills"], "./skills/")
@@ -51,7 +51,7 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(codex["interface"]["developerName"], "Publisher")
         self.assertEqual(codex["interface"]["websiteURL"], codex["homepage"])
         self.assertEqual(codex["interface"]["defaultPrompt"], ["Find papers"])
-        self.assertEqual(codex["version"], "0.0.0+git.abcdef1")
+        self.assertEqual(codex["version"], COMMIT[:7])
         self.assertNotIn("logo", codex["interface"])
         self.assertNotIn("userConfig", codex)
 
@@ -62,6 +62,7 @@ class ManifestTests(unittest.TestCase):
         self.assertNotIn("skills", claude)
 
         copilot = self.read("plugin.json")
+        self.assertEqual(copilot["version"], COMMIT[:7])
         self.assertEqual(copilot["$schema"], AGENT_SCHEMA)
         self.assertEqual(copilot["extensions"], {"com.github.copilot": {}})
         self.assertTrue({"skills", "hooks", "mcpServers", "interface"}.isdisjoint(copilot))
@@ -82,14 +83,14 @@ class ManifestTests(unittest.TestCase):
             metadata={"homepage": "https://example.test/project"},
             manifest_fields={"codex": {"interface": {"websiteURL": "https://example.test/product"}}},
         )
-        write_manifests(self.root, spec, self.stage, "1.2.3", COMMIT)
+        write_manifests(self.root, spec, self.stage, "1.2.3")
         codex = self.read(".codex-plugin/plugin.json")
         self.assertEqual(codex["interface"]["websiteURL"], "https://example.test/product")
 
     def test_copilot_does_not_migrate_claude_hooks(self):
         self.stage.write_text("hooks/hooks.json", '{"hooks":{"SessionStart":[]}}')
         spec = PluginSpec("fixture", "upstream", manifests={"plugin.json": "template"})
-        write_manifests(self.root, spec, self.stage, "1.2.3-rc.1", COMMIT)
+        write_manifests(self.root, spec, self.stage, "1.2.3-rc.1")
         copilot = self.read("plugin.json")
         self.assertNotIn("hooks", copilot)
         self.assertFalse((self.root / "com.github.copilot/hooks/hooks.json").exists())
@@ -104,7 +105,7 @@ class ManifestTests(unittest.TestCase):
             "extensions": {"com.openai": {"interface": {"displayName": "Upstream"}}},
         }))
         spec = PluginSpec("fixture", "upstream", manifests={"plugin.json": "template"})
-        write_manifests(self.root, spec, self.stage, "1.2.3", COMMIT)
+        write_manifests(self.root, spec, self.stage, "1.2.3")
         copilot = self.read("plugin.json")
         self.assertEqual(copilot["$schema"], AGENT_SCHEMA)
         self.assertEqual(copilot["name"], "fixture")
@@ -117,13 +118,13 @@ class ManifestTests(unittest.TestCase):
         self.stage.write_text("plugin.json", '{"name":"fixture"}')
         spec = PluginSpec("fixture", "upstream", manifests={"plugin.json": "preserve"})
         with self.assertRaisesRegex(SyncError, r"Copilot requires a supported Agent Plugins " + r"\$schema"):
-            write_manifests(self.root, spec, self.stage, "1.2.3", COMMIT)
+            write_manifests(self.root, spec, self.stage, "1.2.3")
 
     def test_mismatched_mcp_schema_is_rejected(self):
         self.stage.write_text("mcp.json", '{"$schema":"wrong","mcpServers":{}}')
         spec = PluginSpec("fixture", "upstream", manifests={"plugin.json": "template"})
         with self.assertRaisesRegex(SyncError, "mcp.json must use"):
-            write_manifests(self.root, spec, self.stage, "1.2.3", COMMIT)
+            write_manifests(self.root, spec, self.stage, "1.2.3")
         self.assertFalse((self.root / "plugin.json").exists())
 
     def test_portable_config_rejects_legacy_fields(self):
@@ -132,5 +133,5 @@ class ManifestTests(unittest.TestCase):
             manifest_fields={"copilot": {"$schema": AGENT_SCHEMA, "hooks": "hooks.json"}},
         )
         with self.assertRaisesRegex(SyncError, "Unsupported copilot manifest fields: hooks"):
-            write_manifests(self.root, spec, self.stage, "1.2.3", COMMIT)
+            write_manifests(self.root, spec, self.stage, "1.2.3")
         self.assertFalse((self.root / "plugin.json").exists())

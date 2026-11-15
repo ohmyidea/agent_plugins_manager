@@ -124,6 +124,22 @@ class MarketplaceTests(unittest.TestCase):
         copilot = json.loads((self.root / MARKETPLACE_PATHS["copilot"]).read_text(encoding="utf-8"))
         self.assertEqual(copilot["plugins"][0]["description"], "After")
 
+    def test_marketplace_versions_follow_existing_split_manifests(self):
+        spec = replace(self.spec, metadata={"version": "next-release"})
+        plugin = self.root / "plugins" / spec.name
+        claude = plugin / "claude/.claude-plugin/plugin.json"
+        claude.parent.mkdir(parents=True)
+        claude.write_text('{"version": "preserved-release"}', encoding="utf-8")
+        (plugin / "claude/plugin.json").write_text('{"version": "abcdef1"}', encoding="utf-8")
+
+        write_marketplaces(self.root, [spec])
+
+        for kind, expected in (("claude", "preserved-release"), ("copilot", "abcdef1")):
+            marketplace = json.loads(
+                (self.root / MARKETPLACE_PATHS[kind]).read_text(encoding="utf-8")
+            )
+            self.assertEqual(marketplace["plugins"][0]["version"], expected)
+
     def test_ambiguous_manifest_roots_are_rejected_before_writing(self):
         spec = PluginSpec(
             "ambiguous",

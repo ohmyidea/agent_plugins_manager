@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import tempfile
 import unittest
@@ -167,6 +168,13 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(main([*remote, "--message", "Release"]), 0)
         self.assertEqual(self.remote_git("show", "marketplace:plugins/example/SKILL.md"), "# Updated")
         self.assertEqual(self.remote_git("log", "-1", "--format=%s", "marketplace"), "Release")
+        version = git("rev-parse", "HEAD", cwd=self.seed)[:7]
+        for kind, paths in PLATFORM_PATHS.items():
+            manifest = json.loads(self.remote_git("show", f"marketplace:plugins/example/{paths.manifest}"))
+            self.assertEqual(manifest["version"], version)
+            if kind != "codex":
+                marketplace = json.loads(self.remote_git("show", f"marketplace:{paths.marketplace}"))
+                self.assertEqual(marketplace["plugins"][0]["version"], version)
         self.assertFalse((output / ".tmp").exists())
 
     def test_rejects_incomplete_output_without_push(self):

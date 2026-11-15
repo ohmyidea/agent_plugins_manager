@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from plugins_manager import Operation, PluginSpec, SyncError, Tree, Updater, load_specs
 from plugins_manager.cli import main
+from plugins_manager.manifests import PLATFORM_PATHS
 
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -71,13 +72,14 @@ class UpdaterTests(unittest.TestCase):
             gitignore="keep",
         )
         result = self.updater.update(spec)
-        self.assertEqual((result.commit, result.version), (commit, "1.2.0"))
+        self.assertEqual((result.commit, result.version), (commit, commit[:7]))
         dest = result.destination
         self.assertFalse((dest / "outside.txt").exists())
         self.assertFalse((dest / ".git").exists())
         self.assertEqual((dest / ".gitignore").read_text(), "upstream-only\n")
         self.assertEqual((dest / ".claude-plugin/plugin.json").read_text(), '{"name":"keep"}\n')
         codex = json.loads((dest / ".codex-plugin/plugin.json").read_text())
+        self.assertEqual(codex["version"], commit[:7])
         self.assertEqual(codex["author"], {"name": "New", "url": "https://example.test"})
         self.assertEqual(codex["skills"], "./skills")
 
@@ -261,6 +263,38 @@ class UpdaterTests(unittest.TestCase):
         for relative in ("plugins", ".agents", ".tmp"):
             self.assertFalse((self.root / relative).exists())
 
+    def test_cli_uses_metadata_version_and_reverts_to_short_commit(self):
+        commit = self.commit({"SKILL.md": "fixture"})
+        self.git("tag", "v1.0.0")
+        configs = self.root / "configs"
+        config = configs / "plugins/fixture.toml"
+        config.parent.mkdir(parents=True)
+        recipe = (
+            '[plugins.fixture]\nrepo = "../local upstream"\n'
+            'ref = "refs/tags/v1.0.0"\n'
+        )
+        output = self.root / "research-marketplace"
+        command = ["--configs", str(configs)]
+        plugin = output / "plugins/fixture"
+        for action, metadata, version in (
+            ("generate", '[plugins.fixture.metadata]\nversion = "preview-1"\n', "preview-1"),
+            ("update", "", commit[:7]),
+        ):
+            config.write_text(recipe + metadata, encoding="utf-8")
+            with redirect_stdout(io.StringIO()) as stdout, redirect_stderr(io.StringIO()):
+                self.assertEqual(main([*command, action, "fixture"]), 0)
+            self.assertIn(f" {version} ({commit[:12]})", stdout.getvalue())
+            for kind, paths in PLATFORM_PATHS.items():
+                manifest = json.loads((plugin / paths.manifest).read_text(encoding="utf-8"))
+                self.assertEqual(manifest["version"], version)
+                [entry] = json.loads(
+                    (output / paths.marketplace).read_text(encoding="utf-8")
+                )["plugins"]
+                if kind == "codex":
+                    self.assertNotIn("version", entry)
+                else:
+                    self.assertEqual(entry["version"], version)
+
     def test_concurrent_update_lock(self):
         lock = self.root / ".tmp/marketplace-sync-fixture.lock"
         lock.mkdir(parents=True)
@@ -319,15 +353,14 @@ class UpdaterTests(unittest.TestCase):
         self.commit(fixture)
         for name, spec in load_specs().items():
             with self.subTest(name=name):
-                result = self.updater.update(replace(spec, repo=self.source.name))
+                result = self.updater.update(replace(spec, repo=self.source.name, ref="HEAD"))
                 dest = result.destination
                 self.assertFalse((dest / ".git").exists())
+                self.assertEqual(result.version, spec.metadata.get("version", result.commit[:7]))
                 for path in spec.manifests:
                     data = json.loads((dest / path).read_text(encoding="utf-8"))
                     self.assertEqual(data["name"], name)
-                    version = (result.version if ".claude-plugin/" in path
-                               else f"0.0.0+git.{result.commit[:7]}")
-                    self.assertEqual(data["version"], version)
+                    self.assertEqual(data["version"], result.version)
                     if path.endswith(".codex-plugin/plugin.json"):
                         plugin_root = (dest / path).parents[1]
                         self.assertTrue((plugin_root / data["interface"]["logo"]).is_file())
@@ -345,8 +378,10 @@ class UpdaterTests(unittest.TestCase):
         self.assertTrue((skills / "scripts/keep.py").is_file())
         self.assertFalse((skills / "scripts/test_smoke.py").exists())
         self.assertFalse((skills / "skills/obsolete").exists())
-        self.assertEqual((skills / "sr-screener/SKILL.md").read_bytes(),
-                         (skills / "skills/sr-screener/SKILL.md").read_bytes())
+        self.assertEqual(
+            (skills / "skills/sr-screener/SKILL.md").read_text(encoding="utf-8"),
+            fixture["sr-screener/SKILL.md"],
+        )
         suite = self.root / "plugins/academic-research-suite"
         self.assertTrue((suite / "skills/academic-research-suite/ars/scripts/check_data.py").is_file())
         nature = self.root / "plugins/nature-skills"

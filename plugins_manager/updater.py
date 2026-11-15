@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 from .config import PluginSpec
 from .icons import write_icons
 from .manifests import template_file, write_manifests
-from .utils.git import checkout, source_version
+from .utils.git import checkout
 from .utils.locks import plugin_lock
 from .utils.tree import SyncError, Tree, delete, exists, is_link
 
@@ -84,7 +84,7 @@ class Updater:
             if (self.root / repo).exists():
                 repo = str(self.root / repo)
             commit = checkout(repo, spec.ref, checkout_dir)
-            version = spec.version or source_version(repo, commit, checkout_dir)
+            version = spec.configured_version or commit[:7]
             source = Tree(checkout_dir)
             if spec.source_dir != ".":
                 source = Tree(source.path(spec.source_dir))
@@ -100,7 +100,7 @@ class Updater:
             if transform is not None:
                 transform(source, stage)
             write_icons(self.root, spec, stage)
-            write_manifests(self.root, spec, stage, version, commit)
+            write_manifests(self.root, spec, stage, version)
             write_gitignore(self.root, spec.gitignore, stage)
             stage.validate_links()
             for path in spec.required:

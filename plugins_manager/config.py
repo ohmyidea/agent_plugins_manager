@@ -169,20 +169,22 @@ class PluginSpec:
                         f"Copilot manifest must use {target}, replacing {path}"
                     )
         table(self.metadata)
+        if "version" in self.metadata:
+            string(self.metadata["version"])
         try:
             json.dumps(self.metadata, allow_nan=False)
         except (TypeError, ValueError) as error:
             raise SyncError(
                 f"Metadata must be representable as JSON: {error}"
             ) from error
-        if {"name", "version"} & self.metadata.keys():
-            raise SyncError("Set name and version on the plugin, outside metadata")
+        if "name" in self.metadata:
+            raise SyncError("Set the plugin name in the recipe table header")
         for platform, fields in table(self.manifest_fields).items():
             choice(platform, *MANIFEST_PATHS)
             table(fields)
             if {"name", "version"} & fields.keys():
                 raise SyncError(
-                    "Set name and version on the plugin, outside manifest_fields"
+                    "Set the plugin name in the recipe table header and version in metadata"
                 )
         try:
             json.dumps(self.manifest_fields, allow_nan=False)
@@ -193,9 +195,15 @@ class PluginSpec:
         for path in self.required:
             relative(path)
 
+    @property
+    def configured_version(self) -> str | None:
+        return self.metadata.get("version", self.version)
+
     @classmethod
     def parse(cls, name: str, raw: object) -> "PluginSpec":
         data = table(raw).copy()
+        if "version" in data:
+            raise SyncError(f"Set version in [plugins.{name}.metadata]")
         check_keys(
             data,
             {"repo"},
@@ -203,7 +211,6 @@ class PluginSpec:
                 "ref",
                 "layout",
                 "source_dir",
-                "version",
                 "gitignore",
                 "manifests",
                 "metadata",

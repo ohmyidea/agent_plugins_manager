@@ -51,12 +51,6 @@ PORTABLE_SCHEMAS = {
     f"https://agent-plugins.org/schemas/{version}/plugin.schema.json"
     for version in ("1.0.0", "1.1.0")
 }
-SEMVER = re.compile(
-    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
-    r"(?:-(?:0|[1-9][0-9]*|[0-9]*[a-zA-Z-][a-zA-Z0-9-]*)"
-    r"(?:\.(?:0|[1-9][0-9]*|[0-9]*[a-zA-Z-][a-zA-Z0-9-]*))*)?"
-    r"(?:\+[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*)?"
-)
 PLACEHOLDERS = (
     "<plugin_description>", "<author_name>", "<plugin_homepage>", "<plugin_repository>",
     "<plugin_license>", "<plugin_keywords>",
@@ -159,7 +153,7 @@ def manifest_template(root: Path, platform: str | None, stage: Tree, path: str) 
 
 
 def render_manifest(
-    spec: PluginSpec, platform: str | None, plugin: Tree, base: dict, version: str, commit: str
+    spec: PluginSpec, platform: str | None, plugin: Tree, base: dict, version: str
 ) -> dict:
     custom = spec.manifest_fields.get(platform, {})
     if platform == "copilot":
@@ -177,11 +171,7 @@ def render_manifest(
     }
     manifest = overlay(overlay(base, metadata), custom)
     manifest["name"] = spec.name
-    manifest["version"] = (
-        f"0.0.0+git.{commit[:7]}"
-        if platform in ("codex", "copilot") and not SEMVER.fullmatch(version)
-        else version
-    )
+    manifest["version"] = version
     if platform == "codex":
         infer_codex(manifest, plugin, configured_icon=spec.icon is not None)
     elif platform == "claude" and plugin.path(ICON_PATH).is_file():
@@ -189,7 +179,7 @@ def render_manifest(
     return manifest
 
 
-def write_manifests(root: Path, spec: PluginSpec, stage: Tree, version: str, commit: str) -> None:
+def write_manifests(root: Path, spec: PluginSpec, stage: Tree, version: str) -> None:
     for path, mode in spec.manifests.items():
         try:
             platform, plugin_root = manifest_layout(path)
@@ -206,7 +196,7 @@ def write_manifests(root: Path, spec: PluginSpec, stage: Tree, version: str, com
                 if platform == "copilot":
                     prepare_copilot(plugin, validate_copilot_manifest(base))
                 continue
-            manifest = render_manifest(spec, platform, plugin, base, version, commit)
+            manifest = render_manifest(spec, platform, plugin, base, version)
             if platform == "copilot":
                 prepare_copilot(plugin, validate_copilot_manifest(manifest))
             content = json.dumps(manifest, ensure_ascii=False, indent=4, allow_nan=False)
