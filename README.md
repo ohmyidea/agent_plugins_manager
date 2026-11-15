@@ -16,22 +16,25 @@ python3 -m plugins_manager update zotero-cli
 
 在虚拟环境中运行 `python3 -m pip install .` 后，也可以使用 `plugins-manager` 命令。默认配方位于 `configs/plugins/`，每个插件一个 TOML 文件。默认图标位于 `configs/icons/`。这些资源与 Python 安装包分开，换一份配置或图标无需重新安装。
 
-`--configs` 指定配置目录。省略时，工具从当前目录、上级目录及项目目录查找 `configs/plugins/`。配方放在配置目录的 `plugins/`，图标放在 `icons/`，自定义模板放在 `template/`。`generate` 和 `update` 默认使用配置目录旁边的 `research-marketplace/`，也可用 `--output` 指定其他路径。
+`--configs` 指定配置目录。省略时，工具从当前目录、上级目录及项目目录查找 `configs/plugins/`。配方放在配置目录的 `plugins/`，图标放在 `icons/`，自定义模板放在 `template/`。`generate` 和 `update` 的 `--output` 指定输出基目录，默认是配置目录的父目录。
 
 ```bash
 python3 -m plugins_manager generate --output /path/to/export
+python3 -m plugins_manager generate --combined --output /path/to/export
 plugins-manager generate --configs /path/to/configs --output /path/to/export --dry-run
 ```
 
-`--dry-run` 会克隆指定 Git 引用并运行完整的转换和校验流程，然后清理暂存结果。试运行期间不会创建输出目录。正式更新会替换整个目标插件目录，运行前请保存目标内需要保留的本地改动。单个插件按目录替换，失败时恢复旧目录。批量更新遇到第一个失败时，会报告插件名和错误原因，跳过剩余插件和 marketplace 刷新。之前已成功发布的插件继续生效。同一插件的并发发布通过 `.tmp/` 下的锁隔离。更新结束后会删除空的 `.tmp/`，活动锁或恢复备份会使该目录保留。如果进程被强制终止，先检查目标目录以及锁目录下是否留有 `previous/`，确认没有进程在运行后再处理残留的锁。
+`--dry-run` 会克隆指定 Git 引用并运行转换和校验，然后清理暂存结果。试运行期间不会创建输出目录。正式更新会替换整个目标插件目录，运行前请保存目标内需要保留的本地改动。单个插件和它的 marketplace 条目一起更新，失败时恢复旧内容。批量更新遇到第一个失败时，会报告插件名和原因，跳过后续插件。之前成功更新的插件和条目继续生效。同一插件的并发发布通过 `.tmp/` 下的锁隔离。更新结束后会删除空的 `.tmp/`，活动锁或恢复备份会使该目录保留。如果进程被强制终止，先检查目标目录以及锁目录下是否留有 `previous/`，确认没有进程在运行后再处理残留的锁。
 
 ## 插件图标
 
-在配方的插件表中设置 `icon`。普通相对路径以 `--configs` 指定或自动发现的配置目录为基准。使用 `config:` 前缀时，路径以当前 TOML 文件所在目录为基准。也可以使用本地绝对路径或 HTTP(S) 直达 PNG 的 URL。
+在 `[plugins.<name>.rules]` 中设置 `icon`。普通相对路径以 `--configs` 指定或自动发现的配置目录为基准。使用 `config:` 前缀时，路径以当前 TOML 文件所在目录为基准。也可以使用本地绝对路径或 HTTP(S) 直达 PNG 的 URL。
 
 ```toml
 [plugins.example]
 repo = "https://example.org/team/tools.git"
+
+[plugins.example.rules]
 icon = "config:../icons/example.png"
 # 或改用 icon = "https://example.org/images/example.png"
 ```
@@ -44,27 +47,28 @@ icon = "config:../icons/example.png"
 
 | 插件 | 导入方式 | 布局差异 |
 | --- | --- | --- |
-| academic-research-skills | 选择性导入 | 保留五个技能及根目录运行资源，同时为 `skills/` 发现布局提供完整副本 |
+ | academic-research-skills | 选择性导入 | 将五个技能放入 `skills/`，保留根目录运行资源 |
 | academic-research-suite | 选择性导入 | 整体保留 suite 技能，根目录缺失时从 `plugins/ars-codex/` 导入 |
 | nature-skills | 选择性导入 | 导入许可证和完整技能依赖，剔除仓库站点、开发文件和仅供 README 展示的图片 |
 | research-writing-assistant | 选择性导入 | 整体保留技能，导入运行脚本、启动钩子和写作模板 |
 | paper-spine | 选择性导入 | 分别导入 `dist/claude` 和 `dist/codex`，将清单写入各自的子目录 |
 | zotero-cli | 选择性导入 | 导入 `skill/` 下的 `zotero-cli` 技能 |
 
-默认配方沿用原脚本的上游仓库、分支和 marketplace 元数据。在 `[plugins.<name>.metadata]` 中填写 `version` 可以指定插件版本。已有的顶层 `version` 需要移到这个表中。省略时使用实际检出提交的前七位 SHA，即使 `ref` 指定的是标签也是如此。缺少插件清单模板时，工具直接从配方生成清单。缺少项目的 .gitignore 模板时，使用随包附带的版本。
+默认配方沿用各自的上游仓库和分支。版本依次取 `metadata.<platform>.manifest.version`、平台默认版本、跨平台默认版本、实际检出提交的前七位 SHA。切换标签时，未显式配置的版本同样使用提交 SHA。缺少插件清单模板时，工具直接从配方生成清单。缺少项目的 .gitignore 模板时，使用随包附带的版本。
 
 ## 接入新插件
 
-接入新插件时，在 [配置目录](configs/plugins/) 新增一个以插件名命名的 TOML 文件，例如 `configs/plugins/example.toml`。工具按文件名排序加载配置目录下的 TOML 文件，并检查插件名是否重复。以下示例从 monorepo 的子目录导入技能，保留 Codex 清单中的平台字段。
+接入新插件时，将 [配置模板](configs/plugin_template.toml) 复制到 [配置目录](configs/plugins/)，例如 `configs/plugins/example.toml`，并替换插件名、源码及资源路径。工具按文件名排序加载目录下的 TOML 文件，并检查插件名是否重复。以下示例从 monorepo 的子目录导入技能，保留 Codex 清单中的平台字段。
 
 ```toml
 [plugins.example]
 repo = "https://example.org/team/tools.git"
 ref = "refs/tags/v1.2.0"
+
+[plugins.example.rules]
 source_dir = "packages/example"
 layout = "selective"
 gitignore = "keep"
-marketplaces = ["codex"]
 required = ["skills/example/SKILL.md"]
 
 operations = [
@@ -73,24 +77,35 @@ operations = [
     { action = "copy", from = "README.md", to = "README.md", optional = true },
 ]
 
-[plugins.example.manifests]
-".codex-plugin/plugin.json" = "merge"
-
 [plugins.example.metadata]
 description = "Example research workflow"
 version = "1.2.0"
+
+[plugins.example.metadata.codex]
+category = "Productivity"
+
+[plugins.example.metadata.codex.marketplace]
+policy = { installation = "AVAILABLE", authentication = "ON_INSTALL" }
+
+[plugins.example.metadata.codex.manifest]
+mode = "merge"
+interface = { displayName = "Example Research", shortDescription = "Research workflow" }
 ```
 
 ```bash
 python3 -m plugins_manager generate --dry-run
 ```
 
-- `repo` 支持 Git URL、本地绝对路径或相对于配置目录的本地路径。`ref` 默认检出远程默认分支，也可指定分支、标签或可从仓库取得的提交。Git 子模块需要单独处理。
+- 在 `[plugins.<name>]` 中填写 `repo` 和可选的 `ref`。`repo` 支持 Git URL、本地绝对路径或相对于配置目录的本地路径。`ref` 默认检出远程默认分支，也可指定分支、标签或可从仓库取得的提交。Git 子模块需要单独处理。
+- `[plugins.<name>.rules]` 集中放置 `source_dir`、`layout`、`gitignore`、`icon`、`required` 和 `operations`。需要迁移旧配方时，将这六项从插件表移到 `rules`。使用默认打包规则时可以省略整个表。
 - `source_dir` 默认是仓库根目录。`layout = "full"` 先复制该目录的内容，再应用转换操作。`layout = "selective"` 从空目录开始。
 - `copy` 默认从上游复制。用 `origin = "stage"` 可从暂存目录复制。`move` 在暂存目录内移动。`remove` 接收路径或 glob 数组。`mkdir` 创建目录。`replace` 按字面替换 UTF-8 文件中的文本。
 - `copy`、`move` 和 `replace` 支持 `optional = true` 跳过缺失文件。已存在的目标或缺少待替换文本会报错。`move` 可用 `skip_existing = true` 保留现有目标。`replace` 可用 `allow_unchanged = true` 接受已包含新文本的文件。`required` 列出所有转换完成后必须存在的路径。
-- `marketplaces` 指定插件可收录的平台，值为 `codex`、`claude`、`copilot` 的数组。省略时收录到所有具有对应插件清单的平台，`marketplaces = []` 表示不收录。
-- `manifests` 将相对路径映射到处理方式。`template` 按平台生成，`merge` 在已有清单上更新配方指定的字段，`preserve` 校验已有清单的名称并保留其内容。`manifests = {}` 可跳过清单处理。
+- `[plugins.<name>.metadata]` 接受跨平台共用的版本、描述、作者、主页、仓库、许可证和关键字。`[plugins.<name>.metadata.<platform>]` 声明生成目标，接受该平台的插件清单和目录条目共用字段。Codex 的共用字段是 `category`，会映射到插件的 `interface.category` 和目录条目的 `category`。Claude 和 Copilot 可以覆盖共享元数据，Claude 还支持 `displayName`、`dependencies`、`defaultEnabled` 和 `metadata`。
+- `marketplace` 和 `manifest` 分别继承适用于自己输出的默认值，再应用子表覆盖。对象按键合并，数组整体替换。
+- 平台下的 `manifest.root` 是打包产物内的相对根目录，默认 `"."`。文件名由平台决定。`mode = "template"` 从模板生成，`"merge"` 以打包产物的原清单为底，`"preserve"` 校验并保留原清单。默认使用 `template`。
+- `manifest` 也可声明仅用于插件清单的原生字段，例如 Codex 的 `interface` 或 Claude 的 `userConfig`。清单专属覆盖与市场专属覆盖分别生效。
+- 平台下的 `marketplace` 配置条目的展示信息或策略。默认收录，`enabled = false` 只生成插件清单。条目的名称、来源和版本由产物决定。
 - `gitignore` 默认使用 `template/.gitignore`。`keep` 保留导入后的状态，`merge` 将模板追加到导入的文件末尾。
 
 复杂布局可通过 Python 扩展。回调接收上游目录和暂存目录，运行时机在配方操作之后、清单处理和最终校验之前。
@@ -120,13 +135,13 @@ print(result.commit)
 | Claude Code | `.claude-plugin/plugin.json` | 写入共享元数据和可选 `icon`。标准组件目录由 Claude Code 自动发现，可在配方里声明其他组件。 |
 | GitHub Copilot CLI | `plugin.json` | 使用 Agent Plugins 格式，默认 `1.0.0`。技能从 `skills/<name>/SKILL.md` 发现，MCP 使用根目录的 `mcp.json`。 |
 
-已受支持的 Agent Plugins `$schema` 会沿用。也可通过 `manifest_fields.copilot` 显式指定。旧配方若指定了 `.github/plugin/plugin.json` 或 `.plugin/plugin.json`，请把目标改为插件根目录下的 `plugin.json`。已暂存的旧 Copilot 清单会在生成时清除。
+Copilot 的 `metadata.copilot.manifest.schema` 可指定 `1.0.0` 或 `1.1.0`。省略时采用根清单或模板中受支持的 schema，缺省为 `1.0.0`。生成时会清理该根目录下的旧 Copilot 清单。
 
 工具会把可以直接转换的 `.mcp.json` 写成同 schema 版本的 `mcp.json`，并把常规位置的 Copilot v1 hooks 复制到 `com.github.copilot/hooks/hooks.json`。共用源文件保留给其他平台。自定义组件路径可通过配方的 `operations` 整理到新版目录，带请求头或其他无法直接转换的 MCP 配置需提供原生 `mcp.json`。
 
-Codex 的 `interface` 由生成器根据插件名称、简介、作者、主页和图标推导。
+Codex 的 `interface` 支持展示名、短描述、长描述、开发者、分类、能力标签、网址、示例提示词、品牌颜色、图标和截图。生成器用共享元数据和已打包图标填充缺省项。显式资源路径以各自插件根目录为基准。Claude 的清单支持 `displayName`、`icon`、`documentationUrl`、`supportUrl`、`privacyPolicyUrl` 和 `termsOfServiceUrl`。
 
-可以在配置目录的 `template/` 下提供平台模板。对应文件为 `.codex-plugin/plugin.json`、`.claude-plugin/plugin.json` 和 `plugin.json`。三个平台生成的插件清单都使用配方指定的版本或默认的七位 SHA。`preserve` 模式沿用源清单。公开上架所需的审核信息和链接应由发布者提供。
+可以在配置目录的 `template/` 下提供平台模板。对应文件为 `.codex-plugin/plugin.json`、`.claude-plugin/plugin.json` 和 `plugin.json`。Codex 和 Copilot 共用安装根时，根清单会带上 Codex 的 `com.openai` 展示配置，核心元数据须一致。需要不同的包描述、版本或组件布局时，请分别设置 `manifest.root`。
 
 - [OpenAI Docs 清单字段](https://developers.openai.com/plugins/deploy/submission#manifest-fields)
 - [Claude Code 清单参考](https://code.claude.com/docs/en/plugins-reference)
@@ -140,28 +155,42 @@ Codex 的 `interface` 由生成器根据插件名称、简介、作者、主页�
 - Claude Code 的 `.claude-plugin/marketplace.json`
 - GitHub Copilot 的 `.github/plugin/marketplace.json`
 
-`generate` 默认生成所有适用平台的市场清单。可以重复指定 `--type` 选择要生成的清单。
+`generate` 默认按平台独立生成，`--combined` 生成一个共享 marketplace。
 
-```bash
-python3 -m plugins_manager generate --type codex --type copilot
+```text
+<output>/
+  codex/research-marketplace/     # 独立 Codex 产物
+  claude/research-marketplace/    # 独立 Claude 产物
+  copilot/research-marketplace/   # 独立 Copilot 产物
+  all/research-marketplace/       # --combined 产物
 ```
 
-`update` 根据输出目录中已有的市场清单推断平台。若没有任何市场清单，先运行 `generate`。插件收录的平台仍由配方 `marketplaces` 和已声明的插件清单决定。刷新时会移除已被当前配方排除的平台条目。
+独立模式可重复指定 `--type` 选择平台。一次构建中，同一个插件只检出一次并执行一次公共打包操作，再按平台复制和生成。配方中显式声明的其他平台安装子目录会从当前平台的产物中省略。共用相同 `manifest.root` 的平台则各自使用该目录的内容。
+
+合并模式中的 `--type` 选择新生成的市场清单。已经引用本次构建产物的目录条目会同步更新或按配置移除。只有本次会写入的目录参与条目校验，`--dry-run` 也使用这一规则。
+
+`update` 默认发现已有的独立平台产物，可用 `--type` 缩小范围。更新合并产物时使用 `update --combined`。刷新只处理本次选中的插件。独立目录中移除平台配置后，更新会移除该平台的受管产物和条目。
 
 生成器会为 Codex 市场条目补齐分类和安装策略字段，默认分类为 `Productivity`。
 
-条目的来源路径相对于 marketplace 根目录。例如 PaperSpine 的 Claude 和 Copilot 条目指向 `./plugins/paper-spine/claude`，Codex 条目指向 `./plugins/paper-spine/codex`。重新生成时，匹配条目的来源路径和配方提供的目录元数据会更新。Claude 和 Copilot 条目的版本取自磁盘上的插件清单。插件尚未生成时，条目使用配方中显式指定的版本。Codex 从插件清单读取版本。现有安装策略、额外字段和其他插件条目会保留。
+条目的来源路径相对于 marketplace 根目录。例如 PaperSpine 的 Claude 和 Copilot 条目指向 `./plugins/paper-spine/claude`，Codex 条目指向 `./plugins/paper-spine/codex`。目录字段优先取平台的 `marketplace`，其次取平台和跨平台默认值；上游清单中的展示字段可以补齐缺省值。Claude 和 Copilot 的版本始终取最终插件清单。Claude 条目还支持 `displayName` 和 `relevance`，Copilot 支持 `category`、`tags` 和 `strict`，Codex 支持 `category` 和 `policy`。显式配置的安装策略覆盖已有值。
+
+在每个 marketplace 内，插件产物和条目一起更新。若写入失败，工具会尝试恢复已改动的清单和原插件。无法恢复的旧清单备份会保留，错误会报告原文件和备份路径。独立模式下已成功更新的平台目录会继续生效。手工条目与其他插件条目保留。
 
 ## 生成、更新与发布
 
 - `generate` 按配方生成本地插件和市场清单。默认处理全部插件，也可以列出要生成的插件名。直接运行 `python3 -m plugins_manager` 会显示帮助。
 - `update` 在已生成的 marketplace 中更新插件并刷新现有平台的清单。默认更新全部配置的插件，也可以列出要更新的插件名。
-- `publish` 读取当前目录下的 `research-marketplace/` 并推送到指定仓库分支。产物在其他位置时，用 `--output` 指定。命令需要同时指定 `--repo` 和 `--branch`。
+- `publish` 发布一个 marketplace 根目录，默认是当前目录下的 `all/research-marketplace/`。发布独立平台产物时，将 `--output` 指向该平台的完整 marketplace 路径，并指定 `--repo` 和 `--branch`。各平台可发布到不同分支。
 
 ```bash
-python3 -m plugins_manager generate
-python3 -m plugins_manager update
-python3 -m plugins_manager publish --repo OWNER/REPO --branch marketplace
+python3 -m plugins_manager generate --output ../out
+python3 -m plugins_manager update --output ../out --type claude
+python3 -m plugins_manager publish --output ../out/claude/research-marketplace --repo OWNER/REPO --branch claude
+
+python3 -m plugins_manager generate --combined --output ../out
+python3 -m plugins_manager update --combined --output ../out
+python3 -m plugins_manager publish --output ../out/all/research-marketplace --repo OWNER/REPO --branch marketplace
 ```
 
 `generate` 和 `update` 都支持 `--exclude PLUGIN`，跳过指定插件及其市场条目。一个选项可以接多个插件名，也可以重复指定。如果同时列出要处理的插件，请把它们放在排除选项前。

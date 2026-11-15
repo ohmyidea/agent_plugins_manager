@@ -1,9 +1,10 @@
 [plugins.academic-research-skills]
-marketplaces = ["claude", "copilot"]
-icon = "config:../icons/academic-research-skills.png"
 repo = "https://github.com/Imbad0202/academic-research-skills.git"
 ref = "refs/tags/v3.24.3"
 # ref = "36b22af2ff7b463e5f616f1d616a8f0cb7f43c35"
+
+[plugins.academic-research-skills.rules]
+icon = "config:../icons/academic-research-skills.png"
 layout = "selective"
 required = [
     "skills/academic-paper-reviewer/SKILL.md",
@@ -52,7 +53,6 @@ operations = [
 
 [plugins.academic-research-skills.metadata]
 description = "Production-grade academic research pipeline: research → write → review → revise → finalize."
-shortDescription = ""
 author = { name = "Cheng-I Wu" }
 version = "3.24.3"
 homepage = "https://github.com/Imbad0202/academic-research-skills"
@@ -69,3 +69,14 @@ keywords = [
     "peer-review",
     "scholarly-publishing",
 ]
+
+[plugins.academic-research-skills.metadata.claude]
+displayName = "Academic Research Skills"
+
+[plugins.academic-research-skills.metadata.codex.marketplace]
+enabled = false
+
+[plugins.academic-research-skills.metadata.codex.manifest]
+interface = { displayName = "Academic Research Skills", shortDescription = "Academic research workflows" }
+
+[plugins.academic-research-skills.metadata.copilot]

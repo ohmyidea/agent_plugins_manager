@@ -1,8 +1,9 @@
 [plugins.nature-skills]
-marketplaces = ["codex", "claude", "copilot"]
-icon = "config:../icons/nature-skills.png"
 repo = "https://github.com/Yuan1z0825/nature-skills.git"
 ref = "main"
+
+[plugins.nature-skills.rules]
+icon = "config:../icons/nature-skills.png"
 layout = "selective"
 required = ["skills/nature-shared/SKILL.md"]
 operations = [
@@ -38,3 +39,11 @@ keywords = [
     "citation",
     "publication",
 ]
+
+[plugins.nature-skills.metadata.claude]
+displayName = "Nature Skills"
+
+[plugins.nature-skills.metadata.codex.manifest]
+interface = { displayName = "Nature Skills", shortDescription = "Academic publishing workflows" }
+
+[plugins.nature-skills.metadata.copilot]

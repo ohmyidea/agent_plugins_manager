@@ -1,8 +1,9 @@
 [plugins.research-writing-assistant]
-marketplaces = ["codex", "claude", "copilot"]
-icon = "config:../icons/research-writing-assistant.png"
 repo = "https://github.com/Norman-bury/research-writing-skill.git"
 ref = "main"
+
+[plugins.research-writing-assistant.rules]
+icon = "config:../icons/research-writing-assistant.png"
 layout = "selective"
 required = ["skills"]
 operations = [
@@ -34,3 +35,11 @@ keywords = [
     "latex",
     "literature-review",
 ]
+
+[plugins.research-writing-assistant.metadata.claude]
+displayName = "Research Writing Assistant"
+
+[plugins.research-writing-assistant.metadata.codex.manifest]
+interface = { displayName = "Research Writing Assistant", shortDescription = "中文科研论文写作助手" }
+
+[plugins.research-writing-assistant.metadata.copilot]

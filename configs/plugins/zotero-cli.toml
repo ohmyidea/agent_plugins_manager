@@ -1,8 +1,9 @@
 [plugins.zotero-cli]
-marketplaces = ["codex", "claude", "copilot"]
-icon = "config:../icons/zotero-cli.png"
 repo = "https://github.com/Agents365-ai/zotero-cli-ai.git"
 ref = "main"
+
+[plugins.zotero-cli.rules]
+icon = "config:../icons/zotero-cli.png"
 layout = "selective"
 required = ["skills/zotero-cli/SKILL.md"]
 operations = [
@@ -18,3 +19,11 @@ homepage = "https://github.com/Agents365-ai/zotero-cli-ai"
 repository = "https://github.com/Agents365-ai/zotero-cli-ai"
 license = "AGPL-3.0"
 keywords = ["academic", "research", "zotero", "cli"]
+
+[plugins.zotero-cli.metadata.claude]
+displayName = "Zotero CLI"
+
+[plugins.zotero-cli.metadata.codex.manifests]
+interface = { displayName = "Zotero CLI", shortDescription = "Manage Zotero references" }
+
+[plugins.zotero-cli.metadata.copilot]

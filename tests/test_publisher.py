@@ -7,9 +7,9 @@ from contextlib import chdir, redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from plugins_manager import PluginSpec, SyncError, Tree, publish
+from plugins_manager import PlatformSpec, PluginSpec, SyncError, Tree, publish
 from plugins_manager.cli import main
-from plugins_manager.manifests import PLATFORM_PATHS
+from plugins_manager.manifest import PLATFORM_PATHS
 from plugins_manager.marketplace import write_marketplaces
 from plugins_manager.utils.git import git
 from plugins_manager.utils.locks import plugin_lock
@@ -47,7 +47,8 @@ class PublisherTests(unittest.TestCase):
         tree.write_text("plugins/example/asset.txt", "runtime asset\n")
         tree.write_text("plugins/unlisted/info.txt", "local only\n")
         tree.write_text("configs/plugins/example.toml", "local recipe\n")
-        write_marketplaces(self.output, [PluginSpec("example", "source")])
+        platforms = {kind: PlatformSpec(kind) for kind in PLATFORM_PATHS}
+        write_marketplaces(self.output, [PluginSpec("example", "source", platforms=platforms)])
 
     def seed_main(self):
         git("init", "--initial-branch=main", cwd=self.seed)
@@ -123,6 +124,7 @@ class PublisherTests(unittest.TestCase):
         config = configs / "plugins/example.toml"
         config.parent.mkdir(parents=True)
         recipe = '[plugins.example]\nrepo = "../seed"\n'
+        recipe += "".join(f"[plugins.example.metadata.{kind}]\n" for kind in PLATFORM_PATHS)
         config.write_text(recipe, encoding="utf-8")
         git("init", "--initial-branch=main", cwd=self.seed)
         upstream = Tree(self.seed)
@@ -130,7 +132,7 @@ class PublisherTests(unittest.TestCase):
         git("add", ".", cwd=self.seed)
         git("commit", "-m", "Upstream", cwd=self.seed)
 
-        output = root / "research-marketplace"
+        output = root / "all/research-marketplace"
         local = ["--configs", str(configs)]
         remote = [
             "publish",
@@ -141,13 +143,13 @@ class PublisherTests(unittest.TestCase):
                 main([*local, *remote])
             self.assertEqual(error.exception.code, 2)
             self.assertEqual(main(remote), 1)
-            self.assertEqual(main([*local, "generate", "--dry-run"]), 0)
+            self.assertEqual(main([*local, "generate", "--combined", "--dry-run"]), 0)
             self.assertFalse(output.exists())
 
             self.assertEqual(main(local), 0)
             self.assertIn("usage: plugins-manager", stdout.getvalue())
             self.assertFalse(output.exists())
-            self.assertEqual(main([*local, "generate"]), 0)
+            self.assertEqual(main([*local, "generate", "--combined"]), 0)
             self.assertEqual(self.remote_git("for-each-ref"), "")
             payload = output / "plugins/example/SKILL.md"
             self.assertEqual(payload.read_text(encoding="utf-8"), "# Original\n")
@@ -161,7 +163,7 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(self.remote_git("show", "marketplace:plugins/example/SKILL.md"), "# Original")
 
             config.write_text(recipe, encoding="utf-8")
-            self.assertEqual(main([*local, "update"]), 0)
+            self.assertEqual(main([*local, "update", "--combined"]), 0)
             self.assertEqual(payload.read_text(encoding="utf-8"), "# Updated\n")
             self.assertEqual(self.remote_git("show", "marketplace:plugins/example/SKILL.md"), "# Original")
 
@@ -176,6 +178,34 @@ class PublisherTests(unittest.TestCase):
                 marketplace = json.loads(self.remote_git("show", f"marketplace:{paths.marketplace}"))
                 self.assertEqual(marketplace["plugins"][0]["version"], version)
         self.assertFalse((output / ".tmp").exists())
+
+    def test_publish_a_single_platform_from_split_output(self):
+        git("init", "--initial-branch=main", cwd=self.seed)
+        Tree(self.seed).write_text("SKILL.md", "# Source")
+        git("add", ".", cwd=self.seed)
+        git("commit", "-m", "Upstream", cwd=self.seed)
+        root = self.output.parent
+        configs = root / "configs"
+        recipe = configs / "plugins/example.toml"
+        recipe.parent.mkdir(parents=True)
+        recipe.write_text(
+            '[plugins.example]\nrepo = "../seed"\n'
+            '[plugins.example.metadata.claude]\n[plugins.example.metadata.codex]\n',
+            encoding="utf-8",
+        )
+        base = root / "split"
+        output = base / "claude/research-marketplace"
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(main([
+                "--configs", str(configs), "generate", "--output", str(base), "--type", "claude",
+            ]), 0)
+            self.assertEqual(main([
+                "publish", "--output", str(output), "--repo", str(self.remote), "--branch", "claude",
+            ]), 0)
+        files = self.remote_git("ls-tree", "-r", "--name-only", "claude").splitlines()
+        self.assertIn(".claude-plugin/marketplace.json", files)
+        self.assertIn("plugins/example/.claude-plugin/plugin.json", files)
+        self.assertNotIn("plugins/example/.codex-plugin/plugin.json", files)
 
     def test_rejects_incomplete_output_without_push(self):
         missing = "plugins/example/.codex-plugin/plugin.json"

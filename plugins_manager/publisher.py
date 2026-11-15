@@ -7,7 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
 
-from .manifests import PLATFORM_PATHS
+from .manifest import PLATFORM_PATHS
 from .utils.git import git
 from .utils.json_io import read_json_object
 from .utils.locks import plugin_lock
@@ -92,8 +92,8 @@ def snapshot_output(output: Path, destination: Path) -> tuple[list[str], list[st
             for name in names:
                 locks.enter_context(plugin_lock(source.root, name))
             paths = [*marketplace_paths, *(f"plugins/{name}" for name in names)]
-            manifests = sorted(manifest for group in plugins.values() for manifest in group)
-            for manifest in manifests:
+            manifest = sorted(manifest for group in plugins.values() for manifest in group)
+            for manifest in manifest:
                 source.file(manifest)
             for name in names:
                 plugin = Tree(source.path(f"plugins/{name}"))
@@ -102,7 +102,7 @@ def snapshot_output(output: Path, destination: Path) -> tuple[list[str], list[st
                     raise SyncError(f"Nested Git metadata found in plugin {name!r}")
             for relative in paths:
                 target.copy_from(source, relative, relative)
-            return paths, [*marketplace_paths, *manifests]
+            return paths, [*marketplace_paths, *manifest]
     finally:
         lock.rmdir()
 

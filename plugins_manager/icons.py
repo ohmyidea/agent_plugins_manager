@@ -1,11 +1,11 @@
 """Read plugin icons from local PNG files or HTTP(S) image URLs."""
 
 from http.client import HTTPException
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.request import Request, urlopen
 
 from .config import PluginSpec
-from .manifests import ICON_PATH, manifest_layout
+from .manifest import ICON_PATH
 from .utils.tree import SyncError, Tree, is_link
 
 MAX_ICON_BYTES = 5 * 1024 * 1024
@@ -40,9 +40,9 @@ def write_icons(root: Path, spec: PluginSpec, stage: Tree) -> None:
     if spec.icon is None:
         return
     paths = set()
-    for manifest, mode in spec.manifests.items():
-        platform, plugin_root = manifest_layout(manifest)
-        if platform in ("codex", "claude") and (mode != "preserve" or not plugin_root.parts):
+    for target in spec.platforms.values():
+        plugin_root = PurePosixPath(target.root)
+        if target.kind in ("codex", "claude") and target.mode != "preserve":
             paths.add((plugin_root / ICON_PATH).as_posix())
     if not paths:
         return

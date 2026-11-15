@@ -1,8 +1,9 @@
 [plugins.paper-spine]
-marketplaces = ["codex", "claude", "copilot"]
-icon = "config:../icons/paper-spine.png"
 repo = "https://github.com/WUBING2023/PaperSpine.git"
 ref = "main"
+
+[plugins.paper-spine.rules]
+icon = "config:../icons/paper-spine.png"
 layout = "selective"
 required = [
     "claude/skills/paper-spine/SKILL.md",
@@ -14,11 +15,6 @@ operations = [
     { action = "copy", from = "README.md", to = "README.md" },
     { action = "copy", from = "LICENSE", to = "LICENSE" },
 ]
-
-[plugins.paper-spine.manifests]
-"claude/.claude-plugin/plugin.json" = "template"
-"claude/plugin.json" = "template"
-"codex/.codex-plugin/plugin.json" = "template"
 
 [plugins.paper-spine.metadata]
 description = "Contribution-first, reviewer-aware academic paper and report writing system for Claude Code."
@@ -34,3 +30,14 @@ keywords = [
     "reports",
     "competition-writing",
 ]
+
+[plugins.paper-spine.metadata.claude]
+displayName = "PaperSpine"
+manifest = { root = "claude" }
+
+[plugins.paper-spine.metadata.codex.manifest]
+root = "codex"
+interface = { displayName = "PaperSpine", shortDescription = "Academic writing and review" }
+
+[plugins.paper-spine.metadata.copilot]
+manifest = { root = "claude" }

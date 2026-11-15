@@ -3,7 +3,7 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "plugins-manager"
+name = "agent-plugins-manager"
 version = "0.1.0"
 description = "Import and normalize research marketplace plugins"
 readme = "README.md"

@@ -4,9 +4,11 @@ import json
 import re
 import tomllib
 from dataclasses import dataclass, field, replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
-from .manifests import MANIFEST_PATHS, manifest_layout
+from .manifest import COMMON_FIELDS, MANIFEST_PATHS, manifest_fields_for
+from .marketplace_fields import CATALOG_FIELDS, LISTING_FIELDS, validate_entry_fields
+from .utils.json_io import overlay
 from .utils.tree import SyncError, Tree, path_parts
 
 DEFAULT_OUTPUT_DIR = "research-marketplace"
@@ -14,7 +16,7 @@ DEFAULT_OUTPUT_DIR = "research-marketplace"
 DEFAULT_CONFIGS_DIR = "configs"
 PLUGIN_RECIPES_DIR = "plugins"
 
-STANDARD_MANIFESTS = dict.fromkeys(MANIFEST_PATHS.values(), "template")
+RULE_FIELDS = {"layout", "source_dir", "gitignore", "required", "operations", "icon"}
 
 OPERATION_KEYS = {
     "copy": ({"from", "to"}, {"origin", "optional"}),
@@ -126,21 +128,103 @@ class Operation:
 
 
 @dataclass(frozen=True)
+class PlatformSpec:
+    kind: str
+    metadata: dict = field(default_factory=dict)
+    root: str = "."
+    mode: str = "template"
+    schema: str | None = None
+    listed: bool = True
+    marketplace: dict = field(default_factory=dict)
+    manifest_overrides: dict = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        choice(self.kind, *MANIFEST_PATHS)
+        if self.root != ".":
+            relative(self.root)
+        choice(self.mode, "template", "merge", "preserve")
+        if self.schema is not None:
+            if self.kind != "copilot" or self.mode == "preserve":
+                raise SyncError("manifest.schema requires a generated Copilot manifest")
+            choice(self.schema, "1.0.0", "1.1.0")
+        allowed = manifest_fields_for(self.kind) | {"version"}
+        if self.kind == "copilot":
+            allowed = allowed - {"$schema"}
+        common = allowed & CATALOG_FIELDS[self.kind]
+        common |= {"category"} if self.kind == "codex" else {"version"}
+        validate_metadata(self.metadata, common)
+        validate_entry_fields(self.kind, {
+            key: value for key, value in self.metadata.items() if key not in LISTING_FIELDS | {"version"}
+        })
+        try:
+            validate_metadata(self.manifest_overrides, allowed)
+        except SyncError as error:
+            raise SyncError(f"manifest: {error}") from error
+        if self.mode == "preserve" and self.manifest_overrides:
+            raise SyncError("manifest.mode = 'preserve' cannot apply manifest field overrides")
+        validate_entry_fields(self.kind, table(self.marketplace))
+        if not isinstance(self.listed, bool):
+            raise SyncError("marketplace.enabled must be true or false")
+
+    @property
+    def manifest(self) -> str:
+        return (PurePosixPath(self.root) / MANIFEST_PATHS[self.kind]).as_posix()
+
+    @property
+    def manifest_metadata(self) -> dict:
+        common = self.metadata
+        if self.kind == "codex" and "category" in self.metadata:
+            common = {"interface": {"category": self.metadata["category"]}}
+        return overlay(common, self.manifest_overrides)
+
+    @classmethod
+    def parse(cls, kind: str, raw: object) -> "PlatformSpec":
+        data = table(raw).copy()
+        manifest_overrides = table(data.pop("manifest", {})).copy()
+        controls = {
+            key: manifest_overrides.pop(key) for key in ("root", "mode", "schema")
+            if key in manifest_overrides
+        }
+        marketplace = table(data.pop("marketplace", {})).copy()
+        listed = marketplace.pop("enabled", True)
+        return cls(
+            kind, data, listed=listed, marketplace=marketplace,
+            manifest_overrides=manifest_overrides, **controls,
+        )
+
+
+def validate_metadata(metadata: dict, allowed: set[str]) -> None:
+    check_keys(table(metadata), set(), allowed)
+    for key in ("version", "description", "homepage", "repository", "license"):
+        if key in metadata:
+            string(metadata[key])
+    if "author" in metadata:
+        author = table(metadata["author"])
+        check_keys(author, set(), {"name", "email", "url"})
+        for value in author.values():
+            string(value)
+    if "keywords" in metadata:
+        for keyword in array(metadata["keywords"]):
+            string(keyword)
+    try:
+        json.dumps(metadata, allow_nan=False)
+    except (TypeError, ValueError) as error:
+        raise SyncError(f"Metadata must be representable as JSON: {error}") from error
+
+
+@dataclass(frozen=True)
 class PluginSpec:
     name: str
     repo: str
     ref: str = "HEAD"
     layout: str = "full"
     source_dir: str = "."
-    version: str | None = None
     gitignore: str = "template"
-    manifests: dict[str, str] = field(default_factory=STANDARD_MANIFESTS.copy)
     metadata: dict = field(default_factory=dict)
+    platforms: dict[str, PlatformSpec] = field(default_factory=dict)
     required: tuple[str, ...] = ()
     operations: tuple[Operation, ...] = ()
     icon: str | None = None
-    manifest_fields: dict[str, dict] = field(default_factory=dict)
-    marketplaces: tuple[str, ...] = tuple(MANIFEST_PATHS)
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", self.name):
@@ -151,83 +235,56 @@ class PluginSpec:
         choice(self.layout, "full", "selective")
         if self.source_dir != ".":
             relative(self.source_dir)
-        if self.version is not None:
-            string(self.version)
         if self.icon is not None:
             string(self.icon)
         choice(self.gitignore, "template", "keep", "merge")
-        for marketplace in self.marketplaces:
-            choice(marketplace, *MANIFEST_PATHS)
-        for path, mode in table(self.manifests).items():
-            relative(path)
-            choice(mode, "template", "merge", "preserve")
-            platform, plugin_root = manifest_layout(path)
-            if platform == "copilot":
-                target = (plugin_root / MANIFEST_PATHS["copilot"]).as_posix()
-                if path != target:
-                    raise SyncError(
-                        f"Copilot manifest must use {target}, replacing {path}"
-                    )
-        table(self.metadata)
-        if "version" in self.metadata:
-            string(self.metadata["version"])
-        try:
-            json.dumps(self.metadata, allow_nan=False)
-        except (TypeError, ValueError) as error:
-            raise SyncError(
-                f"Metadata must be representable as JSON: {error}"
-            ) from error
-        if "name" in self.metadata:
-            raise SyncError("Set the plugin name in the recipe table header")
-        for platform, fields in table(self.manifest_fields).items():
-            choice(platform, *MANIFEST_PATHS)
-            table(fields)
-            if {"name", "version"} & fields.keys():
+        validate_metadata(self.metadata, COMMON_FIELDS | {"version"})
+        manifest_owners = {}
+        for kind, target in table(self.platforms).items():
+            if not isinstance(target, PlatformSpec) or kind != target.kind:
+                raise SyncError(f"Invalid platform target: {kind}")
+            path_key = target.manifest.casefold()
+            other = manifest_owners.setdefault(path_key, kind)
+            if other != kind:
                 raise SyncError(
-                    "Set the plugin name in the recipe table header and version in metadata"
+                    f"{other} and {kind} use the same manifest path {target.manifest}; set manifest.root"
                 )
-        try:
-            json.dumps(self.manifest_fields, allow_nan=False)
-        except (TypeError, ValueError) as error:
-            raise SyncError(
-                f"Manifest fields must be representable as JSON: {error}"
-            ) from error
         for path in self.required:
             relative(path)
 
     @property
     def configured_version(self) -> str | None:
-        return self.metadata.get("version", self.version)
+        return self.metadata.get("version")
 
     @classmethod
     def parse(cls, name: str, raw: object) -> "PluginSpec":
         data = table(raw).copy()
         if "version" in data:
             raise SyncError(f"Set version in [plugins.{name}.metadata]")
-        check_keys(
-            data,
-            {"repo"},
-            {
-                "ref",
-                "layout",
-                "source_dir",
-                "gitignore",
-                "manifests",
-                "metadata",
-                "required",
-                "operations",
-                "icon",
-                "manifest_fields",
-                "marketplaces",
-            },
-        )
-        data["operations"] = tuple(
-            Operation.parse(op) for op in array(data.get("operations", []))
-        )
-        data["required"] = tuple(array(data.get("required", [])))
-        if "marketplaces" in data:
-            data["marketplaces"] = tuple(array(data["marketplaces"]))
-        return cls(name, **data)
+        misplaced = data.keys() & RULE_FIELDS
+        if misplaced:
+            raise SyncError(f"Move {', '.join(sorted(misplaced))} to [plugins.{name}.rules]")
+        check_keys(data, {"repo"}, {"ref", "rules", "metadata"})
+        try:
+            rules = table(data.pop("rules", {})).copy()
+            check_keys(rules, set(), RULE_FIELDS)
+            if "operations" in rules:
+                rules["operations"] = tuple(Operation.parse(op) for op in array(rules["operations"]))
+            if "required" in rules:
+                rules["required"] = tuple(array(rules["required"]))
+        except SyncError as error:
+            raise SyncError(f"rules: {error}") from error
+        metadata = table(data.get("metadata", {})).copy()
+        targets = {}
+        for kind in MANIFEST_PATHS:
+            if kind in metadata:
+                try:
+                    targets[kind] = PlatformSpec.parse(kind, metadata.pop(kind))
+                except SyncError as error:
+                    raise SyncError(f"metadata.{kind}: {error}") from error
+        data["metadata"] = metadata
+        data["platforms"] = targets
+        return cls(name, **data, **rules)
 
 
 def find_configs_dir(root: Path | None = None) -> Path:

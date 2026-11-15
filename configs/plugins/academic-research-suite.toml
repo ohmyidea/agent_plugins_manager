@@ -1,8 +1,9 @@
 [plugins.academic-research-suite]
-marketplaces = ["codex", "claude", "copilot"]
-icon = "config:../icons/academic-research-suite.png"
 repo = "https://github.com/Imbad0202/academic-research-skills-codex.git"
 ref = "main"
+
+[plugins.academic-research-suite.rules]
+icon = "config:../icons/academic-research-suite.png"
 layout = "selective"
 required = ["skills/academic-research-suite/SKILL.md"]
 operations = [
@@ -31,3 +32,11 @@ keywords = [
     "peer-review",
     "scholarly-publishing",
 ]
+
+[plugins.academic-research-suite.metadata.claude]
+displayName = "Academic Research Suite"
+
+[plugins.academic-research-suite.metadata.codex.manifest]
+interface = { displayName = "Academic Research Suite", shortDescription = "Research, write, and review" }
+
+[plugins.academic-research-suite.metadata.copilot]

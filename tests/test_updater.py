@@ -10,9 +10,11 @@ from pathlib import Path
 from threading import Thread
 from unittest.mock import patch
 
-from plugins_manager import Operation, PluginSpec, SyncError, Tree, Updater, load_specs
+from plugins_manager import Operation, PlatformSpec, PluginSpec, SyncError, Tree, Updater, load_specs
 from plugins_manager.cli import main
-from plugins_manager.manifests import PLATFORM_PATHS
+from plugins_manager.manifest import PLATFORM_PATHS
+from plugins_manager.utils.git import checkout
+from plugins_manager.utils.locks import plugin_lock
 
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -54,7 +56,7 @@ class UpdaterTests(unittest.TestCase):
             "components/example/.codex-plugin/plugin.json":
                 '{"name":"upstream","author":{"name":"Original","url":"https://example.test"},'
                 '"skills":"./skills"}',
-            "components/example/.claude-plugin/plugin.json": '{"name":"keep"}\n',
+            "components/example/.claude-plugin/plugin.json": '{"name":"fixture"}\n',
             "components/example/skills/demo/SKILL.md": "# Demo",
             "components/example/.gitignore": "upstream-only\n",
             "outside.txt": "not imported",
@@ -63,9 +65,9 @@ class UpdaterTests(unittest.TestCase):
         spec = self.spec(
             source_dir="components/example",
             ref="refs/tags/v1.2.0",
-            manifests={
-                ".codex-plugin/plugin.json": "merge",
-                ".claude-plugin/plugin.json": "preserve",
+            platforms={
+                "codex": PlatformSpec("codex", mode="merge"),
+                "claude": PlatformSpec("claude", mode="preserve"),
             },
             metadata={"author": {"name": "New"}},
             required=("skills/demo/SKILL.md",),
@@ -77,7 +79,7 @@ class UpdaterTests(unittest.TestCase):
         self.assertFalse((dest / "outside.txt").exists())
         self.assertFalse((dest / ".git").exists())
         self.assertEqual((dest / ".gitignore").read_text(), "upstream-only\n")
-        self.assertEqual((dest / ".claude-plugin/plugin.json").read_text(), '{"name":"keep"}\n')
+        self.assertEqual((dest / ".claude-plugin/plugin.json").read_text(), '{"name":"fixture"}\n')
         codex = json.loads((dest / ".codex-plugin/plugin.json").read_text())
         self.assertEqual(codex["version"], commit[:7])
         self.assertEqual(codex["author"], {"name": "New", "url": "https://example.test"})
@@ -89,7 +91,6 @@ class UpdaterTests(unittest.TestCase):
         commit = self.commit({"payload": "new"})
         spec = self.spec(
             layout="selective",
-            manifests={},
             gitignore="keep",
             required=("payload",),
             operations=(Operation.parse({"action": "copy", "from": "payload", "to": "payload"}),),
@@ -133,45 +134,76 @@ class UpdaterTests(unittest.TestCase):
         configs = self.root / "configs"
         config = configs / "plugins/recipes.toml"
         config.parent.mkdir(parents=True)
-        settings = 'repo = "../local upstream"\ngitignore = "keep"\n'
-        recipe = f"[plugins.first]\n{settings}"
+
+        def recipe(name):
+            settings = (
+                f'[plugins.{name}]\nrepo = "../local upstream"\n'
+                f'[plugins.{name}.rules]\ngitignore = "keep"\n'
+                'operations = [{ action = "mkdir", path = "extra" }]\n'
+            )
+            return settings + "".join(
+                f"[plugins.{name}.metadata.{kind}]\n" for kind in PLATFORM_PATHS
+            )
+
         config.write_text(
-            f"{recipe}[plugins.second]\n{settings}[plugins.third]\n{settings}",
+            recipe("first") + recipe("second") + recipe("third"),
             encoding="utf-8",
         )
         command = ["--configs", str(configs)]
-        output = self.root / "research-marketplace"
-        codex = output / ".agents/plugins/marketplace.json"
-        copilot = output / ".github/plugin/marketplace.json"
-        claude = output / ".claude-plugin/marketplace.json"
+        codex_root = self.root / "codex/research-marketplace"
+        copilot_root = self.root / "copilot/research-marketplace"
+        claude_root = self.root / "claude/research-marketplace"
+        codex = codex_root / ".agents/plugins/marketplace.json"
+        copilot = copilot_root / ".github/plugin/marketplace.json"
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             self.assertEqual(main([*command, "generate", "first", "--exclude", "first"]), 0)
-            self.assertFalse(output.exists())
-            self.assertEqual(
-                main([
-                    *command, "generate", "first", "second", "--exclude", "second",
-                    "--type", "codex", "--type", "copilot",
-                ]),
-                0,
-            )
-            self.assertEqual([path.name for path in (output / "plugins").iterdir()], ["first"])
+            self.assertFalse(codex_root.exists())
+            with (
+                patch("plugins_manager.updater.checkout", wraps=checkout) as fetch,
+                patch.object(Operation, "apply", autospec=True, side_effect=Operation.apply) as apply,
+            ):
+                self.assertEqual(
+                    main([
+                        *command, "generate", "first", "second", "--exclude", "second",
+                        "--type", "codex", "--type", "copilot",
+                    ]),
+                    0,
+                )
+                self.assertEqual(fetch.call_count, 1)
+                self.assertEqual(apply.call_count, 1)
+            for output, kind in ((codex_root, "codex"), (copilot_root, "copilot")):
+                [plugin] = (output / "plugins").iterdir()
+                self.assertEqual(plugin.name, "first")
+                for platform, paths in PLATFORM_PATHS.items():
+                    self.assertEqual((plugin / paths.manifest).exists(), platform == kind)
             for marketplace_file in (codex, copilot):
                 entries = json.loads(marketplace_file.read_text(encoding="utf-8"))["plugins"]
                 self.assertEqual([entry["name"] for entry in entries], ["first"])
-            self.assertFalse(claude.exists())
+            self.assertFalse(claude_root.exists())
 
-            config.write_text(f"{recipe}[plugins.second]\n{settings}", encoding="utf-8")
-            with self.assertRaises(SystemExit) as error:
-                main([*command, "update", "--type", "claude", "first"])
-            self.assertEqual(error.exception.code, 2)
+            config.write_text(recipe("first") + recipe("second"), encoding="utf-8")
+            self.assertEqual(main([*command, "update", "--type", "claude", "first"]), 1)
+            with (
+                plugin_lock(codex_root, "first"),
+                patch("plugins_manager.updater.checkout", wraps=checkout) as fetch,
+            ):
+                self.assertEqual(main([*command, "update", "--type", "codex", "first"]), 1)
+                fetch.assert_not_called()
             self.assertEqual(main([*command, "update", "--exclude", "second"]), 0)
-            self.assertFalse((output / "plugins/second").exists())
+            self.assertFalse((codex_root / "plugins/second").exists())
+            self.assertFalse((copilot_root / "plugins/second").exists())
             for marketplace_file in (codex, copilot):
                 entries = json.loads(marketplace_file.read_text(encoding="utf-8"))["plugins"]
                 self.assertEqual([entry["name"] for entry in entries], ["first"])
             self.assertEqual(main([*command, "update", "first"]), 0)
+            for marketplace_file in (codex, copilot):
+                entries = json.loads(marketplace_file.read_text(encoding="utf-8"))["plugins"]
+                self.assertEqual([entry["name"] for entry in entries], ["first"])
+            self.assertEqual(main([*command, "update", "second", "--type", "codex"]), 0)
+            self.assertFalse((copilot_root / "plugins/second").exists())
+            self.assertEqual(main([*command, "update", "second", "--type", "copilot"]), 0)
 
-        self.assertFalse(claude.exists())
+        self.assertFalse(claude_root.exists())
         for marketplace_file in (codex, copilot):
             entries = json.loads(marketplace_file.read_text(encoding="utf-8"))["plugins"]
             self.assertEqual([entry["name"] for entry in entries], ["first", "second"])
@@ -181,15 +213,19 @@ class UpdaterTests(unittest.TestCase):
         configs = self.root / "configs"
         config = configs / "plugins/recipes.toml"
         config.parent.mkdir(parents=True)
-        settings = 'repo = "../local upstream"\ngitignore = "keep"\nmanifests = {}\n'
+
+        def recipe(name, required=""):
+            return (
+                f'[plugins.{name}]\nrepo = "../local upstream"\n'
+                f'[plugins.{name}.rules]\ngitignore = "keep"\n{required}'
+                f'[plugins.{name}.metadata.codex.marketplace]\nenabled = false\n'
+            )
+
         config.write_text(
-            f"[plugins.first]\n{settings}"
-            f"[plugins.broken]\n{settings}"
-            'required = ["missing.txt"]\n'
-            f"[plugins.later]\n{settings}",
+            recipe("first") + recipe("broken", 'required = ["missing.txt"]\n') + recipe("later"),
             encoding="utf-8",
         )
-        output = self.root / "research-marketplace"
+        output = self.root / "codex/research-marketplace"
         marketplace_file = output / ".agents/plugins/marketplace.json"
         marketplace_file.parent.mkdir(parents=True)
         original = b'{"name":"existing","plugins":[]}\n'
@@ -200,7 +236,7 @@ class UpdaterTests(unittest.TestCase):
             status = main(command)
 
         self.assertEqual(status, 1)
-        self.assertIn("Plugin 'broken' failed: Expected path missing", stderr.getvalue())
+        self.assertIn("Plugin 'broken' failed: codex: Expected path missing", stderr.getvalue())
         self.assertNotIn("later: staging", stdout.getvalue())
         self.assertTrue((output / "plugins/first/SKILL.md").is_file())
         self.assertFalse((output / "plugins/broken").exists())
@@ -225,8 +261,9 @@ class UpdaterTests(unittest.TestCase):
         config = configs / "plugins/fixture.toml"
         config.parent.mkdir(parents=True)
         config.write_text(
-            '[plugins.fixture]\nrepo = "../local upstream"\nicon = "branding/icon.png"\n'
-            'manifests = {".codex-plugin/plugin.json" = "merge"}\n',
+            '[plugins.fixture]\nrepo = "../local upstream"\n'
+            '[plugins.fixture.rules]\nicon = "branding/icon.png"\n'
+            '[plugins.fixture.metadata.codex.manifest]\nmode = "merge"\n',
             encoding="utf-8",
         )
         icon = configs / "branding/icon.png"
@@ -235,20 +272,21 @@ class UpdaterTests(unittest.TestCase):
         template = configs / "template/.gitignore"
         template.parent.mkdir()
         template.write_text("local-rule\n", encoding="utf-8")
-        output = self.root / "export" / "marketplace"
+        base = self.root / "export" / "marketplace"
+        output = base / "codex/research-marketplace"
         command = ["--configs", str(configs)]
-        update = [*command, "update", "--output", str(output), "fixture"]
+        update = [*command, "update", "--output", str(base), "fixture"]
 
         with redirect_stdout(io.StringIO()) as stdout, redirect_stderr(io.StringIO()) as stderr:
             self.assertEqual(main(update), 1)
-            self.assertFalse(output.exists())
-            output.mkdir(parents=True)
+            self.assertFalse(base.exists())
+            base.mkdir(parents=True)
             self.assertEqual(main([*update, "--dry-run"]), 1)
             self.assertIn("Run generate first", stderr.getvalue())
             self.assertNotIn("staging", stdout.getvalue())
-            self.assertEqual(list(output.iterdir()), [])
+            self.assertEqual(list(base.iterdir()), [])
 
-            self.assertEqual(main([*command, "generate", "--output", str(output)]), 0)
+            self.assertEqual(main([*command, "generate", "--output", str(base)]), 0)
             self.commit({"SKILL.md": "updated fixture"})
             self.assertEqual(main(update), 0)
 
@@ -273,16 +311,17 @@ class UpdaterTests(unittest.TestCase):
             '[plugins.fixture]\nrepo = "../local upstream"\n'
             'ref = "refs/tags/v1.0.0"\n'
         )
-        output = self.root / "research-marketplace"
+        output = self.root / "all/research-marketplace"
         command = ["--configs", str(configs)]
         plugin = output / "plugins/fixture"
         for action, metadata, version in (
             ("generate", '[plugins.fixture.metadata]\nversion = "preview-1"\n', "preview-1"),
             ("update", "", commit[:7]),
         ):
-            config.write_text(recipe + metadata, encoding="utf-8")
+            platforms = "".join(f"[plugins.fixture.metadata.{kind}]\n" for kind in PLATFORM_PATHS)
+            config.write_text(recipe + metadata + platforms, encoding="utf-8")
             with redirect_stdout(io.StringIO()) as stdout, redirect_stderr(io.StringIO()):
-                self.assertEqual(main([*command, action, "fixture"]), 0)
+                self.assertEqual(main([*command, action, "--combined", "fixture"]), 0)
             self.assertIn(f" {version} ({commit[:12]})", stdout.getvalue())
             for kind, paths in PLATFORM_PATHS.items():
                 manifest = json.loads((plugin / paths.manifest).read_text(encoding="utf-8"))
@@ -295,6 +334,215 @@ class UpdaterTests(unittest.TestCase):
                 else:
                     self.assertEqual(entry["version"], version)
 
+    def test_platform_overrides_render_native_desktop_catalog_fields(self):
+        self.commit({"SKILL.md": "fixture"})
+        configs = self.root / "configs"
+        config = configs / "plugins/fixture.toml"
+        config.parent.mkdir(parents=True)
+        recipe = """
+[plugins.fixture]
+repo = "../local upstream"
+
+[plugins.fixture.metadata]
+version = "shared"
+description = "Shared summary"
+author = { name = "Lab", url = "https://example.test" }
+homepage = "https://example.test/plugin"
+repository = "https://example.test/source"
+license = "MIT"
+keywords = ["shared"]
+
+[plugins.fixture.metadata.claude]
+version = "claude-default"
+description = "Claude common summary"
+displayName = "Claude Research"
+keywords = ["claude"]
+author = { name = "Claude team" }
+
+[plugins.fixture.metadata.claude.manifest]
+version = "claude-release"
+displayName = "Claude Native Name"
+description = "Claude native summary"
+
+[plugins.fixture.metadata.claude.marketplace]
+description = "Claude catalog summary"
+relevance = { topic = "Papers", signals = { filesRead = ["**/*.bib"] } }
+
+[plugins.fixture.metadata.copilot.marketplace]
+category = "Research"
+tags = ["references"]
+strict = false
+
+[plugins.fixture.metadata.copilot.manifest]
+schema = "1.1.0"
+
+[plugins.fixture.metadata.codex]
+category = "Common research"
+
+[plugins.fixture.metadata.codex.manifest]
+interface.displayName = "Codex Research"
+interface.shortDescription = "Find and review papers"
+interface.longDescription = "Review citations and academic papers."
+interface.defaultPrompt = ["Check these references"]
+interface.capabilities = ["Interactive"]
+interface.category = "Native research"
+
+[plugins.fixture.metadata.codex.marketplace]
+category = "Catalog research"
+policy = { installation = "INSTALLED_BY_DEFAULT" }
+"""
+        config.write_text(recipe, encoding="utf-8")
+        command = ["--configs", str(configs)]
+        with redirect_stdout(io.StringIO()) as stdout:
+            self.assertEqual(main([*command, "generate", "--combined"]), 0)
+        self.assertIn("claude version: claude-release", stdout.getvalue())
+        output = self.root / "all/research-marketplace"
+        plugin = output / "plugins/fixture"
+
+        def documents(kind):
+            paths = PLATFORM_PATHS[kind]
+            manifest = json.loads((plugin / paths.manifest).read_text(encoding="utf-8"))
+            [entry] = json.loads((output / paths.marketplace).read_text(encoding="utf-8"))["plugins"]
+            return manifest, entry
+
+        claude, claude_entry = documents("claude")
+        self.assertEqual(claude["description"], "Claude native summary")
+        self.assertEqual(claude["displayName"], "Claude Native Name")
+        self.assertEqual(claude_entry["displayName"], "Claude Research")
+        self.assertEqual(claude_entry["description"], "Claude catalog summary")
+        self.assertEqual(claude_entry["author"], {"name": "Claude team", "url": "https://example.test"})
+        self.assertEqual(claude_entry["keywords"], ["claude"])
+        self.assertEqual(claude_entry["version"], "claude-release")
+        self.assertEqual(claude_entry["relevance"]["topic"], "Papers")
+
+        copilot, copilot_entry = documents("copilot")
+        self.assertIn("/1.1.0/", copilot["$schema"])
+        self.assertEqual(copilot_entry["repository"], "https://example.test/source")
+        self.assertEqual(copilot_entry["license"], "MIT")
+        self.assertEqual(copilot_entry["keywords"], ["shared"])
+        self.assertEqual(copilot_entry["tags"], ["references"])
+        self.assertFalse(copilot_entry["strict"])
+        self.assertNotIn("displayName", copilot_entry)
+
+        codex, codex_entry = documents("codex")
+        self.assertEqual(codex["interface"]["displayName"], "Codex Research")
+        self.assertEqual(codex["interface"]["category"], "Native research")
+        self.assertEqual(copilot["extensions"]["com.openai"]["interface"], codex["interface"])
+        self.assertEqual(codex_entry["policy"]["installation"], "INSTALLED_BY_DEFAULT")
+        self.assertEqual(codex_entry["category"], "Catalog research")
+        self.assertNotIn("description", codex_entry)
+
+        config.write_text(recipe.split("[plugins.fixture.metadata.copilot.marketplace]")[0], encoding="utf-8")
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(main([*command, "update", "--combined", "fixture"]), 0)
+        for kind in ("codex", "copilot"):
+            paths = PLATFORM_PATHS[kind]
+            self.assertFalse((plugin / paths.manifest).exists())
+            self.assertEqual(
+                json.loads((output / paths.marketplace).read_text(encoding="utf-8"))["plugins"], []
+            )
+
+    def test_marketplace_write_failure_restores_existing_plugin_and_catalogs(self):
+        self.commit({"SKILL.md": "old"})
+        configs = self.root / "configs"
+        config = configs / "plugins/fixture.toml"
+        config.parent.mkdir(parents=True)
+        config.write_text(
+            '[plugins.fixture]\nrepo = "../local upstream"\n'
+            '[plugins.fixture.metadata.claude]\n[plugins.fixture.metadata.copilot]\n',
+            encoding="utf-8",
+        )
+        command = ["--configs", str(configs)]
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(main([*command, "generate", "--combined"]), 0)
+        output = self.root / "all/research-marketplace"
+        files = [output / "plugins/fixture/SKILL.md"]
+        files.extend(output / PLATFORM_PATHS[kind].marketplace for kind in ("claude", "copilot"))
+        before = [path.read_bytes() for path in files]
+        self.commit({"SKILL.md": "new"})
+        replace_path = Path.replace
+
+        def fail_second_catalog(path, destination):
+            if path.suffix == ".json" and destination == files[-1].resolve():
+                raise PermissionError("simulated catalog write failure")
+            return replace_path(path, destination)
+
+        with patch.object(Path, "replace", fail_second_catalog):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as stderr:
+                self.assertEqual(main([*command, "update", "--combined"]), 1)
+        self.assertIn("simulated catalog write failure", stderr.getvalue())
+        self.assertEqual([path.read_bytes() for path in files], before)
+
+    def test_only_validates_marketplaces_used_by_selected_build(self):
+        self.commit({"SKILL.md": "fixture"})
+        configs = self.root / "configs"
+        config = configs / "plugins/fixture.toml"
+        config.parent.mkdir(parents=True)
+        config.write_text(
+            '[plugins.fixture]\nrepo = "../local upstream"\n'
+            '[plugins.fixture.metadata]\n'
+            f'description = "{"x" * 1025}"\n'
+            '[plugins.fixture.metadata.codex]\n[plugins.fixture.metadata.copilot]\n',
+            encoding="utf-8",
+        )
+        base = self.root / "out"
+        command = ["--configs", str(configs), "generate", "fixture", "--output", str(base)]
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as stderr:
+            self.assertEqual(main([*command, "--type", "codex", "--dry-run"]), 0)
+            self.assertEqual(main([*command, "--combined", "--type", "codex", "--dry-run"]), 0)
+            self.assertEqual(main([*command, "--type", "copilot", "--dry-run"]), 1)
+            self.assertIn("Copilot marketplace.description exceeds 1024 characters", stderr.getvalue())
+            self.assertFalse(base.exists())
+            self.assertEqual(main([*command, "--combined", "--type", "codex"]), 0)
+        self.assertTrue((base / "all/research-marketplace/.agents/plugins/marketplace.json").is_file())
+        self.assertFalse((base / "all/research-marketplace/.github/plugin/marketplace.json").exists())
+
+    def test_split_build_uses_platform_roots_and_removes_disabled_platform(self):
+        self.commit({
+            "dist/claude/SKILL.md": "Claude",
+            "dist/codex/SKILL.md": "Codex",
+            "dist/codex/.github/plugin/plugin.json": '{"name":"legacy"}',
+            "LICENSE": "shared",
+        })
+        configs = self.root / "configs"
+        config = configs / "plugins/fixture.toml"
+        config.parent.mkdir(parents=True)
+        defaults = """
+[plugins.fixture]
+repo = "../local upstream"
+
+[plugins.fixture.rules]
+required = ["dist/claude/SKILL.md", "dist/codex/SKILL.md"]
+
+[plugins.fixture.metadata.claude.manifest]
+root = "dist/claude"
+"""
+        codex_target = """
+[plugins.fixture.metadata.codex.manifest]
+root = "dist/codex"
+"""
+        config.write_text(defaults + codex_target, encoding="utf-8")
+        command = ["--configs", str(configs)]
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(main([*command, "generate"]), 0)
+        claude = self.root / "claude/research-marketplace"
+        codex = self.root / "codex/research-marketplace"
+        claude_plugin = claude / "plugins/fixture"
+        codex_plugin = codex / "plugins/fixture"
+        self.assertTrue((claude_plugin / "dist/claude/.claude-plugin/plugin.json").is_file())
+        self.assertTrue((codex_plugin / "dist/codex/.codex-plugin/plugin.json").is_file())
+        self.assertFalse((claude_plugin / "dist/codex").exists())
+        self.assertFalse((codex_plugin / "dist/claude").exists())
+        self.assertFalse((codex_plugin / "dist/codex/.github/plugin/plugin.json").exists())
+        self.assertTrue((claude_plugin / "LICENSE").is_file())
+
+        config.write_text(defaults.replace(', "dist/codex/SKILL.md"', ""), encoding="utf-8")
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(main([*command, "update"]), 0)
+        self.assertFalse(codex_plugin.exists())
+        index = codex / PLATFORM_PATHS["codex"].marketplace
+        self.assertEqual(json.loads(index.read_text(encoding="utf-8"))["plugins"], [])
+
     def test_concurrent_update_lock(self):
         lock = self.root / ".tmp/marketplace-sync-fixture.lock"
         lock.mkdir(parents=True)
@@ -302,7 +550,7 @@ class UpdaterTests(unittest.TestCase):
             self.updater.update(self.spec())
         self.assertTrue(lock.is_dir())
         self.commit({"SKILL.md": "fixture"})
-        other = replace(self.spec(manifests={}, gitignore="keep"), name="other")
+        other = replace(self.spec(gitignore="keep"), name="other")
         self.assertTrue(self.updater.update(other).published)
         self.assertTrue(lock.is_dir())
 
@@ -319,7 +567,7 @@ class UpdaterTests(unittest.TestCase):
             return mkdir(path, *args, **kwargs)
 
         with patch.object(Path, "mkdir", race):
-            result = self.updater.update(self.spec(manifests={}, gitignore="keep"))
+            result = self.updater.update(self.spec(gitignore="keep"))
 
         self.assertTrue(result.published)
         self.assertTrue(removed)
@@ -357,7 +605,8 @@ class UpdaterTests(unittest.TestCase):
                 dest = result.destination
                 self.assertFalse((dest / ".git").exists())
                 self.assertEqual(result.version, spec.metadata.get("version", result.commit[:7]))
-                for path in spec.manifests:
+                for target in spec.platforms.values():
+                    path = target.manifest
                     data = json.loads((dest / path).read_text(encoding="utf-8"))
                     self.assertEqual(data["name"], name)
                     self.assertEqual(data["version"], result.version)
@@ -438,8 +687,8 @@ class UpdaterTests(unittest.TestCase):
         icon.write_bytes((PROJECT / "configs/icons/zotero-cli.png").read_bytes())
         config.write_text(
             '[plugins.fixture]\nrepo = "local upstream"\n'
-            'icon = "config:../icons/fixture.png"\ngitignore = "keep"\n'
-            'manifests = {".claude-plugin/plugin.json" = "template"}\n',
+            '[plugins.fixture.rules]\nicon = "config:../icons/fixture.png"\ngitignore = "keep"\n'
+            '[plugins.fixture.metadata.claude]\n',
             encoding="utf-8",
         )
 
@@ -464,7 +713,7 @@ class UpdaterTests(unittest.TestCase):
 
     def test_copilot_only_plugin_skips_configured_icon(self):
         self.commit({"SKILL.md": "fixture"})
-        spec = self.spec(manifests={"plugin.json": "template"}, gitignore="keep", icon="missing.png")
+        spec = self.spec(platforms={"copilot": PlatformSpec("copilot")}, gitignore="keep", icon="missing.png")
         result = self.updater.update(spec)
         self.assertFalse((result.destination / "assets/icon.png").exists())
         manifest = json.loads((result.destination / "plugin.json").read_text(encoding="utf-8"))
@@ -491,7 +740,7 @@ class UpdaterTests(unittest.TestCase):
                 local = self.root / "local.png"
                 local.write_bytes(png)
                 spec = self.spec(
-                    manifests={".claude-plugin/plugin.json": "template"},
+                    platforms={"claude": PlatformSpec("claude")},
                     gitignore="keep",
                     icon=local.name,
                 )
