@@ -10,7 +10,9 @@
 # [构建] 上游仓库与引用。
 [plugins.example-plugin]
 repo = "https://github.com/OWNER/REPO.git"
-# ref = "HEAD"                         # 可填分支、refs/tags/v1.2.0 或完整提交 SHA
+branch = ""                           # 分支名，例如 main
+tag = ""                              # 标签名，例如 v1.2.0
+commit = ""                           # 完整提交 SHA；优先级 commit > tag > branch，全留空使用默认分支
 
 # [构建] 打包布局、资源与文件操作。
 [plugins.example-plugin.rules]
@@ -27,6 +29,8 @@ operations = [
     ] },
 ]
 # operations 也支持 move、mkdir、replace 和 replace_regex。
+# 所有操作都可加 platform = "codex" 或 platform = ["claude", "copilot"]。
+# 省略 platform（或填 "all"）时对所有平台执行；--type all 执行所含平台匹配的操作，每条一次。
 
 # [共同] 三个平台共享的公共值。
 [plugins.example-plugin.metadata]
@@ -55,7 +59,7 @@ metadata = { team = "Example Team" }
 
 # [市场] Claude → <marketplace>/.claude-plugin/marketplace.json
 [plugins.example-plugin.metadata.claude.marketplace]
-enabled = true                                                               # [构建] false 仍生成插件清单
+enabled = true                                                               # [构建] false 跳过该平台；所有选中平台都禁用时不下载
 category = "Research"
 tags = ["research"]
 relevance = { topic = "References", signals = { filesRead = ["**/*.bib"] } }
@@ -118,7 +122,7 @@ category = "Productivity"
 
 # [市场] Codex → <marketplace>/.agents/plugins/marketplace.json
 [plugins.example-plugin.metadata.codex.marketplace]
-enabled = true                                                         # [构建] false 仍生成插件清单
+enabled = true                                                         # [构建] false 跳过该平台；所有选中平台都禁用时不下载
 policy = { installation = "AVAILABLE", authentication = "ON_INSTALL" }
 # installation 可选 AVAILABLE、INSTALLED_BY_DEFAULT、NOT_AVAILABLE。
 # authentication 可选 ON_INSTALL、ON_USE。
@@ -166,7 +170,7 @@ interface.screenshots = ["./assets/screenshot.png"]
 # license = "MIT"
 # keywords = ["research"]
 
-# [构建] --combined 模式中 Codex 和 Copilot 共用目录时，从根 plugin.json 读取核心字段。
+# [构建] --type all 模式中 Codex 和 Copilot 共用目录时，从根 plugin.json 读取核心字段。
 # 需要不同版本、包描述或组件布局时，设置不同的 root。
 
 # [共同] GitHub Copilot CLI 的公共值。
@@ -182,7 +186,7 @@ interface.screenshots = ["./assets/screenshot.png"]
 
 # [市场] Copilot → <marketplace>/.github/plugin/marketplace.json
 [plugins.example-plugin.metadata.copilot.marketplace]
-enabled = true        # [构建] false 仍生成插件清单
+enabled = true        # [构建] false 跳过该平台；所有选中平台都禁用时不下载
 category = "Research"
 tags = ["research"]
 strict = true

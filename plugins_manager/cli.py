@@ -12,6 +12,7 @@ from .config import (
     DEFAULT_CONFIGS_DIR,
     DEFAULT_OUTPUT_DIR,
     PLUGIN_RECIPES_DIR,
+    PlatformSpec,
     PluginSpec,
     find_configs_dir,
     load_specs,
@@ -67,16 +68,14 @@ def _parser() -> argparse.ArgumentParser:
     generate.set_defaults(run=_run_generate)
     generate.add_argument("names", nargs="*", help="plugin names (default: all configured plugins)")
     generate.add_argument("--exclude", nargs="+", action="extend", default=[], metavar="PLUGIN", help="skip one or more plugins and their marketplace entries")
-    generate.add_argument("--type", dest="marketplace_types", action="append", choices=MARKETPLACE_PATHS, help="platform to generate (repeatable)")
-    generate.add_argument("--combined", action="store_true", help=f"share one marketplace under all/{DEFAULT_OUTPUT_DIR}")
+    generate.add_argument("--type", dest="marketplace_type", required=True, choices=("codex", "claude", "copilot", "all"), help="platform to generate (all: one shared marketplace)")
     generate.add_argument("--dry-run", action="store_true", help="validate plugins without writing output")
 
     update = commands.add_parser("update", parents=[configs, output], help="refresh local plugins and marketplace files")
     update.set_defaults(run=_run_update)
     update.add_argument("names", nargs="*", help="plugin names (default: all configured plugins)")
     update.add_argument("--exclude", nargs="+", action="extend", default=[], metavar="PLUGIN", help="skip one or more plugins and their marketplace entries")
-    update.add_argument("--type", dest="marketplace_types", action="append", choices=MARKETPLACE_PATHS, help="existing platform to update (repeatable)")
-    update.add_argument("--combined", action="store_true", help=f"update all/{DEFAULT_OUTPUT_DIR}")
+    update.add_argument("--type", dest="marketplace_type", choices=("codex", "claude", "copilot", "all"), help="existing platform to update (all: shared marketplace)")
     update.add_argument("--dry-run", action="store_true", help="validate plugins without writing output")
 
     publication = commands.add_parser(
@@ -95,8 +94,8 @@ def _parser() -> argparse.ArgumentParser:
 def _run_list(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> None:
     configs = _configs_dir(args.configs)
     specs = load_specs(configs / PLUGIN_RECIPES_DIR)
-    header = ("Plugin", "Layout", "Repository", "Ref")
-    rows = [(spec.name, spec.layout, spec.repo, spec.ref) for spec in specs.values()]
+    header = ("Plugin", "Layout", "Repository", "Branch", "Tag", "Commit")
+    rows = [(spec.name, spec.layout, spec.repo, spec.branch, spec.tag, spec.commit) for spec in specs.values()]
     widths = [max(map(len, column)) for column in zip(header, *rows)]
 
     print(f"Configs: {configs}")
@@ -138,15 +137,40 @@ def _report_update(name: str, result: UpdateResult, platform: str | None = None)
             print(f"  {kind} version: {version or 'unspecified'}")
 
 
-def _build_combined(
+def _enabled_platforms(spec: PluginSpec, kinds: Iterable[str]) -> dict[str, PlatformSpec]:
+    return {
+        kind: spec.platforms[kind] for kind in kinds
+        if kind in spec.platforms and spec.platforms[kind].listed
+    }
+
+
+def _excluded_platform_roots(spec: PluginSpec, active: Iterable[str]) -> set[str]:
+    roots = [PurePosixPath(spec.platforms[kind].root) for kind in active]
+    return {
+        target.root for target in spec.platforms.values()
+        if target.root != "." and not any(root.is_relative_to(target.root) for root in roots)
+    }
+
+
+def _report_skip(spec: PluginSpec, kinds: Iterable[str]) -> None:
+    print(f"{spec.name}: skipped (not enabled for {', '.join(kinds)})", flush=True)
+
+
+def _build_all(
     updater: Updater,
     specs: Iterable[PluginSpec],
     *,
     dry_run: bool,
     types: Iterable[str],
 ) -> None:
+    types = tuple(types)
     updated_catalogs = set()
     for spec in specs:
+        platforms = _enabled_platforms(spec, types)
+        if not platforms:
+            _report_skip(spec, types)
+            continue
+        build_spec = replace(spec, platforms=platforms)
         catalog_types = catalog_types_for_plugin(updater.output_root, spec.name, types)
 
         def sync_catalogs() -> None:
@@ -154,10 +178,11 @@ def _build_combined(
                 updater.output_root, [spec], types=catalog_types
             ))
 
-        print(f"{spec.name}: staging {spec.ref}", flush=True)
+        print(f"{spec.name}: staging {spec.commit or spec.tag or spec.branch or 'default branch'}", flush=True)
         try:
             result = updater.update(
-                spec, dry_run=dry_run, marketplace_types=catalog_types, on_publish=sync_catalogs,
+                build_spec, dry_run=dry_run, marketplace_types=catalog_types, on_publish=sync_catalogs,
+                exclude_roots=_excluded_platform_roots(spec, platforms),
             )
         except (SyncError, OSError, ValueError) as error:
             raise SyncError(f"Plugin {spec.name!r} failed: {error}") from error
@@ -177,25 +202,27 @@ def _build_split(
         updated_catalogs.update(write_marketplaces(outputs[kind], [spec], types=(kind,)))
 
     for spec in specs:
-        active = [kind for kind in outputs if kind in spec.platforms]
+        active = list(_enabled_platforms(spec, outputs))
         if active:
-            print(f"{spec.name}: staging {spec.ref}", flush=True)
+            print(f"{spec.name}: staging {spec.commit or spec.tag or spec.branch or 'default branch'}", flush=True)
             try:
                 with ExitStack() as stack:
                     reserved = {}
                     if not dry_run:
                         for kind in sorted(active):
                             reserved[kind] = stack.enter_context(plugin_lock(outputs[kind], spec.name))
-                    prepared = stack.enter_context(source.prepare(spec))
+                    scoped = any(operation.platform for operation in spec.operations)
+                    if scoped:
+                        checkout_source = stack.enter_context(source._checkout_source(spec))
+                    else:
+                        prepared = stack.enter_context(source.prepare(spec))
                     for kind in active:
                         target = spec.platforms[kind]
                         platform_spec = replace(spec, platforms={kind: target})
-                        target_root = PurePosixPath(target.root)
-                        excluded = {
-                            other.root for other in spec.platforms.values()
-                            if other.root != "." and not target_root.is_relative_to(other.root)
-                        }
+                        excluded = _excluded_platform_roots(spec, (kind,))
                         try:
+                            if scoped:
+                                prepared = stack.enter_context(source.prepare(platform_spec, source=checkout_source))
                             result = updaters[kind].update(
                                 platform_spec, dry_run=dry_run, prepared=prepared, exclude_roots=excluded,
                                 marketplace_types=(kind,), on_publish=partial(sync, kind, platform_spec),
@@ -206,6 +233,8 @@ def _build_split(
                         _report_update(spec.name, result, kind)
             except (SyncError, OSError, ValueError) as error:
                 raise SyncError(f"Plugin {spec.name!r} failed: {error}") from error
+        else:
+            _report_skip(spec, outputs)
 
         for kind, output in outputs.items():
             if kind in spec.platforms or dry_run or not output.is_dir():
@@ -255,15 +284,22 @@ def _run_update(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
 
 def _run_build(args: argparse.Namespace, configs: Path, specs: list[PluginSpec], *, existing: bool) -> None:
     base = (args.output or configs.parent).resolve()
-    kinds = tuple(dict.fromkeys(args.marketplace_types or MARKETPLACE_PATHS))
-    if args.combined:
+    kinds = (args.marketplace_type,) if args.marketplace_type in MARKETPLACE_PATHS else tuple(MARKETPLACE_PATHS)
+    enabled = []
+    for spec in specs:
+        if _enabled_platforms(spec, kinds):
+            enabled.append(spec)
+        else:
+            _report_skip(spec, kinds)
+    if not enabled:
+        return
+    specs = enabled
+    if args.marketplace_type == "all":
         output = _platform_output(base, "all")
         if existing:
             installed = _existing_marketplace_types(output)
-            kinds = tuple(kind for kind in installed if not args.marketplace_types or kind in kinds)
-            if not kinds:
-                raise SyncError(f"No selected marketplace found in {output}. Run generate --combined first.")
-        _build_combined(Updater(configs, output=output), specs, dry_run=args.dry_run, types=kinds)
+            kinds = tuple(installed)
+        _build_all(Updater(configs, output=output), specs, dry_run=args.dry_run, types=kinds)
     else:
         outputs = {kind: _platform_output(base, kind) for kind in kinds}
         if existing:

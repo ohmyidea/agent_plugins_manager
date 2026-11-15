@@ -92,8 +92,8 @@ def snapshot_output(output: Path, destination: Path) -> tuple[list[str], list[st
             for name in names:
                 locks.enter_context(plugin_lock(source.root, name))
             paths = [*marketplace_paths, *(f"plugins/{name}" for name in names)]
-            manifest = sorted(manifest for group in plugins.values() for manifest in group)
-            for manifest in manifest:
+            manifests = sorted(manifest for group in plugins.values() for manifest in group)
+            for manifest in manifests:
                 source.file(manifest)
             for name in names:
                 plugin = Tree(source.path(f"plugins/{name}"))
@@ -102,7 +102,7 @@ def snapshot_output(output: Path, destination: Path) -> tuple[list[str], list[st
                     raise SyncError(f"Nested Git metadata found in plugin {name!r}")
             for relative in paths:
                 target.copy_from(source, relative, relative)
-            return paths, [*marketplace_paths, *manifest]
+            return paths, [*marketplace_paths, *manifests]
     finally:
         lock.rmdir()
 

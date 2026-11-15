@@ -1,27 +1,59 @@
 [plugins.research-writing-assistant]
 repo = "https://github.com/Norman-bury/research-writing-skill.git"
-ref = "main"
+branch = "main"
+commit = "6f7959554b4614d879d79cb4ece9ed04a7c8a88c"
 
 [plugins.research-writing-assistant.rules]
 icon = "config:../icons/research-writing-assistant.png"
 layout = "selective"
-required = ["skills"]
+required = [
+    "skills/using-research-writing/SKILL.md",
+    "skills/paper-orchestration/SKILL.md",
+    "skills/verification/SKILL.md",
+    "scripts/init_plan.sh",
+    "scripts/init_plan.ps1",
+    "scripts/scholar_search.py",
+    "scripts/pdf_parser.py",
+    "scripts/style_check.sh",
+    "scripts/style_check.ps1",
+    "scripts/research_quality_gate.ps1",
+    "hooks/hooks.json",
+    "hooks/session-start",
+    "hooks/run-hook.cmd",
+    "plan-template/project-overview.md",
+    "plan-template/progress.md",
+    "plan-template/stage-gates.md",
+    "templates/figure-template.py",
+    "latex-templates/README.md",
+]
 operations = [
+    # Skills include their own references, chapter templates and LaTeX parser guide.
     { action = "copy", from = "skills", to = "skills" },
-    { action = "copy", from = "scripts", to = "scripts", optional = true },
-    { action = "copy", from = "hooks", to = "hooks", optional = true },
-    { action = "copy", from = "plan-template", to = "plan-template", optional = true },
-    { action = "copy", from = "templates", to = "templates", optional = true },
-    { action = "copy", from = "latex-templates", to = "latex-templates", optional = true },
-    { action = "remove", paths = [
-        "hooks/hooks-cursor.json",
-        "scripts/check_skill_integrity.ps1",
-    ] },
+    # Runtime scripts only; repository integrity checks are development tooling.
+    { action = "copy", from = "scripts/init_plan.sh", to = "scripts/init_plan.sh" },
+    { action = "copy", from = "scripts/init_plan.ps1", to = "scripts/init_plan.ps1" },
+    { action = "copy", from = "scripts/scholar_search.py", to = "scripts/scholar_search.py" },
+    { action = "copy", from = "scripts/pdf_parser.py", to = "scripts/pdf_parser.py" },
+    { action = "copy", from = "scripts/style_check.sh", to = "scripts/style_check.sh" },
+    { action = "copy", from = "scripts/style_check.ps1", to = "scripts/style_check.ps1" },
+    { action = "copy", from = "scripts/research_quality_gate.ps1", to = "scripts/research_quality_gate.ps1" },
+    # The Claude session hook needs both its Bash and Windows launchers.
+    { action = "copy", from = "hooks/hooks.json", to = "hooks/hooks.json" },
+    { action = "copy", from = "hooks/session-start", to = "hooks/session-start" },
+    { action = "copy", from = "hooks/run-hook.cmd", to = "hooks/run-hook.cmd" },
+    { action = "copy", from = "plan-template", to = "plan-template" },
+    { action = "copy", from = "templates", to = "templates" },
+    { action = "copy", from = "latex-templates", to = "latex-templates" },
+    { action = "copy", from = "README.md", to = "README.md" },
+    # Remove development-only instructions whose checker is not shipped.
+    { action = "replace_regex", paths = ["skills/verification/SKILL.md"], old = '(?m)^\| skill 改造完成 \|[^\r\n]*\r?\n', new = "" },
+    { action = "replace_regex", paths = ["skills/verification/SKILL.md"], old = '(?ms)^### Skill 完整性验证\r?\n.*?(?=^### 稿件质量门验证)', new = "" },
 ]
 
 [plugins.research-writing-assistant.metadata]
+version = "3.1.0"
 description = "面向中文科研论文的AI写作助手: 支持头脑风暴、章节写作、文献综述、Python图表、LaTeX输出"
-author = { name = "Norman-bury" }
+author = { name = "Norman-bury", url = "https://github.com/Norman-bury" }
 homepage = "https://github.com/Norman-bury/research-writing-skill"
 repository = "https://github.com/Norman-bury/research-writing-skill"
 license = "MIT"
@@ -39,7 +71,12 @@ keywords = [
 [plugins.research-writing-assistant.metadata.claude]
 displayName = "Research Writing Assistant"
 
-[plugins.research-writing-assistant.metadata.codex.manifest]
-interface = { displayName = "Research Writing Assistant", shortDescription = "中文科研论文写作助手" }
+[plugins.research-writing-assistant.metadata.codex]
+manifest.interface.displayName = "Research Writing Assistant"
+manifest.interface.shortDescription = "中文科研论文写作助手"
+manifest.interface.longDescription = "面向中文科研论文的AI写作助手: 支持头脑风暴、章节写作、文献综述、Python图表、LaTeX输出"
+manifest.interface.websiteURL = "https://github.com/Norman-bury/research-writing-skill"
 
 [plugins.research-writing-assistant.metadata.copilot]
+marketplace.category = "Research"
+marketplace.tags = ["research"]

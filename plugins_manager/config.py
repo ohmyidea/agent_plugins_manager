@@ -3,6 +3,7 @@
 import json
 import re
 import tomllib
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
@@ -71,6 +72,7 @@ def check_keys(data: dict, required: set[str], optional: set[str]) -> None:
 class Operation:
     action: str
     args: dict
+    platform: tuple[str, ...] = ()
 
     @classmethod
     def parse(cls, raw: object) -> "Operation":
@@ -78,6 +80,15 @@ class Operation:
         action = string(data.pop("action", None))
         if action not in OPERATION_KEYS:
             raise SyncError(f"Unknown operation: {action}")
+        platforms = ()
+        if "platform" in data:
+            selection = data.pop("platform")
+            values = [selection] if isinstance(selection, str) else array(selection)
+            if not values:
+                raise SyncError("platform must name at least one platform")
+            platforms = tuple(dict.fromkeys(choice(string(value), *MANIFEST_PATHS, "all") for value in values))
+            if "all" in platforms:
+                platforms = ()
         check_keys(data, *OPERATION_KEYS[action])
         for key in ("path", "from", "to"):
             if key in data:
@@ -93,7 +104,10 @@ class Operation:
         for key in ("optional", "allow_unchanged", "skip_existing"):
             if key in data and not isinstance(data[key], bool):
                 raise SyncError(f"{key} must be true or false")
-        return cls(action, data)
+        return cls(action, data, platforms)
+
+    def matches(self, platforms: Iterable[str]) -> bool:
+        return not self.platform or bool(set(self.platform).intersection(platforms))
 
     def apply(self, source: Tree, stage: Tree) -> None:
         data = self.args
@@ -216,7 +230,9 @@ def validate_metadata(metadata: dict, allowed: set[str]) -> None:
 class PluginSpec:
     name: str
     repo: str
-    ref: str = "HEAD"
+    branch: str = ""
+    tag: str = ""
+    commit: str = ""
     layout: str = "full"
     source_dir: str = "."
     gitignore: str = "template"
@@ -231,7 +247,13 @@ class PluginSpec:
             raise SyncError(f"Invalid plugin name: {self.name!r}")
         relative(self.name)
         string(self.repo)
-        string(self.ref)
+        string(self.branch, allow_empty=True)
+        string(self.tag, allow_empty=True)
+        string(self.commit, allow_empty=True)
+        if self.commit and not re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", self.commit):
+            raise SyncError("commit must be a full 40- or 64-character hexadecimal SHA")
+        if (self.branch and not self.branch.strip()) or (self.tag and not self.tag.strip()):
+            raise SyncError("branch and tag must be names or empty strings")
         choice(self.layout, "full", "selective")
         if self.source_dir != ".":
             relative(self.source_dir)
@@ -261,10 +283,12 @@ class PluginSpec:
         data = table(raw).copy()
         if "version" in data:
             raise SyncError(f"Set version in [plugins.{name}.metadata]")
+        if "ref" in data:
+            raise SyncError("Replace ref with branch, tag or commit")
         misplaced = data.keys() & RULE_FIELDS
         if misplaced:
             raise SyncError(f"Move {', '.join(sorted(misplaced))} to [plugins.{name}.rules]")
-        check_keys(data, {"repo"}, {"ref", "rules", "metadata"})
+        check_keys(data, {"repo"}, {"branch", "tag", "commit", "rules", "metadata"})
         try:
             rules = table(data.pop("rules", {})).copy()
             check_keys(rules, set(), RULE_FIELDS)

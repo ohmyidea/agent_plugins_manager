@@ -1,6 +1,7 @@
 [plugins.nature-skills]
 repo = "https://github.com/Yuan1z0825/nature-skills.git"
-ref = "main"
+branch = "main"
+commit = "7bff1d0539c0dfad6c30178bb93ce6dd8a5cebf8"
 
 [plugins.nature-skills.rules]
 icon = "config:../icons/nature-skills.png"
@@ -12,8 +13,6 @@ operations = [
         "skills/*/tests",
         "skills/*/evals",
         "skills/*/README.md",
-        "skills/*/README_EN.md",
-        "skills/*/CHANGELOG.md",
         "skills/nature-downloader/docs",
         "skills/nature-figure/assets/chart-atlas",
         "skills/nature-figure/assets/gallery",
@@ -25,6 +24,7 @@ operations = [
 ]
 
 [plugins.nature-skills.metadata]
+version = "git+7bff1d0"
 description = "A growing collection of academic workflow bundles for producing work at Nature-journal standard."
 author = { name = "Yuan1z0825" }
 homepage = "https://github.com/Yuan1z0825/nature-skills"
@@ -43,7 +43,11 @@ keywords = [
 [plugins.nature-skills.metadata.claude]
 displayName = "Nature Skills"
 
-[plugins.nature-skills.metadata.codex.manifest]
-interface = { displayName = "Nature Skills", shortDescription = "Academic publishing workflows" }
+[plugins.nature-skills.metadata.codex]
+manifest.interface.displayName = "Nature Skills"
+manifest.interface.shortDescription = "Academic publishing workflows"
+manifest.interface.websiteURL = "https://github.com/Yuan1z0825/nature-skills"
 
 [plugins.nature-skills.metadata.copilot]
+marketplace.category = "Research"
+marketplace.tags = ["research"]

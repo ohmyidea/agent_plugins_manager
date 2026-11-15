@@ -95,32 +95,43 @@ class Updater:
         return plugins / name, scratch
 
     @contextmanager
-    def prepare(self, spec: PluginSpec, *, transform: Transform | None = None) -> Iterator[PreparedPlugin]:
-        """Check out and apply shared operations once for one or more builds."""
+    def _checkout_source(self, spec: PluginSpec) -> Iterator[PreparedPlugin]:
+        """Keep one source checkout alive while preparing platform payloads."""
         with TemporaryDirectory(prefix="marketplace-source-") as temporary:
             workspace = Path(temporary)
             checkout_dir = workspace / "source"
             repo = spec.repo
             if (self.root / repo).exists():
                 repo = str(self.root / repo)
-            commit = checkout(repo, spec.ref, checkout_dir)
+            commit = checkout(repo, checkout_dir, branch=spec.branch, tag=spec.tag, commit=spec.commit)
             source = Tree(checkout_dir)
             if spec.source_dir != ".":
                 source = Tree(source.path(spec.source_dir))
+            yield PreparedPlugin(source.root, commit)
+
+    @contextmanager
+    def prepare(
+        self, spec: PluginSpec, *, transform: Transform | None = None,
+        source: PreparedPlugin | None = None,
+    ) -> Iterator[PreparedPlugin]:
+        """Prepare operations for the selected platforms, optionally reusing a checkout."""
+        with (nullcontext(source) if source is not None else self._checkout_source(spec)) as payload:
+            source_tree = Tree(payload.root)
             if spec.layout == "full" and not spec.operations and transform is None:
-                yield PreparedPlugin(source.root, commit)
+                yield payload
                 return
 
-            output = workspace / "prepared"
-            output.mkdir()
-            if spec.layout == "full":
-                shutil.copytree(source.root, output, symlinks=True, dirs_exist_ok=True, ignore=ignore_git)
-            stage = Tree(output)
-            for operation in spec.operations:
-                operation.apply(source, stage)
-            if transform is not None:
-                transform(source, stage)
-            yield PreparedPlugin(output, commit)
+            with TemporaryDirectory(prefix="marketplace-prepared-") as temporary:
+                output = Path(temporary)
+                if spec.layout == "full":
+                    shutil.copytree(source_tree.root, output, symlinks=True, dirs_exist_ok=True, ignore=ignore_git)
+                stage = Tree(output)
+                for operation in spec.operations:
+                    if operation.matches(spec.platforms):
+                        operation.apply(source_tree, stage)
+                if transform is not None:
+                    transform(source_tree, stage)
+                yield PreparedPlugin(output, payload.commit)
 
     def remove(self, name: str, *, on_publish: Callable[[], None]) -> None:
         destination, _ = self._destination(name)
@@ -146,8 +157,8 @@ class Updater:
             shutil.copytree(prepared.root, output, symlinks=True, ignore=ignore)
             stage = Tree(output)
             write_icons(self.root, spec, stage)
-            manifest = write_manifest(self.root, spec, stage, version)
-            for kind, manifest in manifest.items():
+            manifests = write_manifest(self.root, spec, stage, version)
+            for kind, manifest in manifests.items():
                 if kind in marketplace_types and spec.platforms[kind].listed:
                     render_entry(spec, kind, manifest)
             write_gitignore(self.root, spec.gitignore, stage)
@@ -158,7 +169,7 @@ class Updater:
 
             if backup is not None:
                 self._publish(output, destination, backup, on_publish)
-            versions = {kind: manifest.get("version") for kind, manifest in manifest.items()}
+            versions = {kind: manifest.get("version") for kind, manifest in manifests.items()}
             return UpdateResult(destination, commit, version, backup is not None, versions)
 
     @staticmethod

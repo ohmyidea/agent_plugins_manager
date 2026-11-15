@@ -1,6 +1,6 @@
 [plugins.academic-research-suite]
 repo = "https://github.com/Imbad0202/academic-research-skills-codex.git"
-ref = "main"
+tag = "v3.24.2"
 
 [plugins.academic-research-suite.rules]
 icon = "config:../icons/academic-research-suite.png"
@@ -8,14 +8,50 @@ layout = "selective"
 required = ["skills/academic-research-suite/SKILL.md"]
 operations = [
     { action = "copy", from = "LICENSE", to = "LICENSE", optional = true },
-    { action = "copy", from = "skills", to = "skills", optional = true },
+    { action = "copy", from = "skills/academic-research-suite", to = "skills/academic-research-suite", optional = true },
     # Older checkouts only provide the materialized plugin copy.
     { action = "copy", from = "plugins/ars-codex/skills/academic-research-suite", to = ".suite-fallback", optional = true },
     { action = "move", from = ".suite-fallback", to = "skills/academic-research-suite", optional = true, skip_existing = true },
-    { action = "remove", paths = [".suite-fallback"] },
+    { action = "remove", paths = [
+        ".suite-fallback",
+        # Development and test trees, including nested adapter tests and CI.
+        "skills/academic-research-suite/**/.github",
+        "skills/academic-research-suite/**/tests",
+        "skills/academic-research-suite/**/test_*.py",
+        "skills/academic-research-suite/**/__pycache__",
+        "skills/academic-research-suite/**/.pytest_cache",
+        "skills/academic-research-suite/ars/plugin-evals*",
+        "skills/academic-research-suite/ars/scripts/_ci_pytest_manifest.toml",
+        "skills/academic-research-suite/ars/scripts/check_ci_pytest_manifest.py",
+        "skills/academic-research-suite/ars/scripts/run_ci_pytest_manifest.py",
+        # Historical evaluation output; gold/calibration inputs and contracts stay.
+        "skills/academic-research-suite/ars/evals/heldout/**/runs",
+        "skills/academic-research-suite/ars/evals/heldout/**/raw",
+        "skills/academic-research-suite/codex/topology-experiment/results",
+        "skills/academic-research-suite/ars/docs/changelog-archive",
+        # Repository maintenance and unsupported Pi host packaging.
+        "skills/academic-research-suite/ars/.gitattributes",
+        "skills/academic-research-suite/ars/.gitleaks*",
+        "skills/academic-research-suite/ars/.command-invariants.toml",
+        "skills/academic-research-suite/ars/pyproject.toml",
+        "skills/academic-research-suite/ars/package.json",
+        "skills/academic-research-suite/ars/pi",
+        "skills/academic-research-suite/ars/CHANGELOG.md",
+        "skills/academic-research-suite/ars/CONTRIBUTING.md",
+        "skills/academic-research-suite/ars/GOVERNANCE.md",
+        "skills/academic-research-suite/ars/README*.md",
+        "skills/academic-research-suite/ars/SECURITY.md",
+        "docs/design",
+        "docs/migration",
+    ] },
+    # The runtime package does not include the upstream repository's self-tests.
+    { action = "replace_regex", paths = [
+        "skills/academic-research-suite/SKILL.md",
+    ], old = '(?m)^## Verification Discipline\r?$', new = "## Runtime Distribution\n\nThis distribution omits upstream unit tests, CI, plugin-evaluation harnesses, historical evaluation outputs, and repository-maintenance files. The manifests retain upstream provenance and package-validation catalogs; those catalogs are not an inventory of bundled self-tests. Run upstream repository regression/package checks in the original repository. Research workflows, manuscript validators, runtime contracts, gold/calibration inputs, and optional Codex runtime components remain available.\n\n## Verification Discipline" },
 ]
 
 [plugins.academic-research-suite.metadata]
+version = "3.24.2"
 description = "Production-grade academic research pipeline (Codex): research → write → review → revise → finalize."
 author = { name = "Cheng-I Wu" }
 homepage = "https://github.com/Imbad0202/academic-research-skills-codex"
@@ -34,9 +70,12 @@ keywords = [
 ]
 
 [plugins.academic-research-suite.metadata.claude]
-displayName = "Academic Research Suite"
+marketplace.enabled = false
 
-[plugins.academic-research-suite.metadata.codex.manifest]
-interface = { displayName = "Academic Research Suite", shortDescription = "Research, write, and review" }
+[plugins.academic-research-suite.metadata.codex]
+manifest.interface.displayName = "Academic Research Suite"
+manifest.interface.shortDescription = "Academic research workflows"
+manifest.interface.websiteURL = "https://github.com/Imbad0202/academic-research-skills-codex"
 
 [plugins.academic-research-suite.metadata.copilot]
+marketplace.enabled = false
