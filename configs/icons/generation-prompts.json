@@ -1,0 +1,34 @@
+{
+  "generated_on": "2026-11-16",
+  "tool": "built-in image_gen",
+  "export": {
+    "size": [
+      256,
+      256
+    ],
+    "format": "PNG",
+    "mode": "RGBA",
+    "operation": "With explicit user approval, clip alpha outside the detected tile using an 8% rounded-rectangle mask to remove stray pixels, then downscale. Preserve internal artwork, colors and materials; no redraw or recoloring."
+  },
+  "initial_style_prompt": "Use case: logo-brand. Asset type: one production app/plugin icon, square composition, transparent outside its tile. Create a fresh, beautiful, lively, inviting premium icon with very soft flowing lines and generously rounded geometry. Unified collection art direction: a softly rounded squircle tile with a light pastel base, a single bold sculptural symbol, satin clay blended with a little translucent frosted-glass depth, subtle soft highlights, restrained ambient shadow attached to the object, clear silhouette. Sophisticated and playful, energetic but calm enough for research tools, never childish. Soft curves, rounded stroke ends, no sharp corners or heavy outlines. The tile takes 90% of the canvas with even transparent margin, the symbol fills about 64% of the canvas. Nearly front-facing with very slight dimensional tilt. Clear at 48px. No letters, words, numbers, labels, watermark, logo text, surrounding scene, checkerboard, or extra floating decorations. Generate exactly ONE centered standalone icon, not a sheet or mockup.",
+  "subjects": {
+    "academic-research-skills": "Academic research, reading and evidence discovery: a rounded open notebook with a soft oversized magnifying glass resting across one page, a few broad abstract page marks only. Fresh turquoise and jade with a warm lemon accent on a very pale mint tile. One connected clear emblem, not several unrelated objects.",
+    "academic-research-suite": "An integrated academic research workflow: three plump softly rounded document tabs interlinked in a gentle circular flow, with one simple luminous rounded hub at their center, conveying connected research, writing and review. Periwinkle blue and soft indigo with a lively peach accent, on a very pale lavender tile. Keep the emblem compact, readable and sculptural, with thick soft connections.",
+    "nature-skills": "Nature-standard scientific research: one beautiful rounded laboratory flask with a softly curling green leaf growing inside, gently flowing mint liquid, no measurements. Fresh emerald and lime with a small warm sun-yellow accent, on a pale pistachio tile. Soft, organic, optimistic, lively.",
+    "paper-spine": "A well-structured academic manuscript: a small curved stack of creamy paper sheets bound by one flowing sculptural coral ribbon along the left spine, the ribbon rising into an elegant soft sweep. Warm coral and tangerine with pale apricot and cream on a very pale peach tile. A few broad embossed page marks, no readable text. Clearly paper and structure, not a closed book or feather.",
+    "research-writing-assistant": "Academic writing assistance: one generously rounded fountain-pen nib sweeping a beautiful smooth curved ink flourish over a soft cream manuscript page. Orchid purple and raspberry pink, a small peach accent, on a pale lilac tile. The nib shape must be friendly and rounded rather than dangerously sharp; flowing ribbonlike line, lyrical energy.",
+    "rw-consulting-ppt": "A lively consulting presentation: one softly rounded presentation screen on a curved compact stand, containing three broad rounded rising bars and a single smooth upward swoosh, all sculptural and simple. Warm sunshine yellow, apricot and a vibrant teal accent on a very pale buttercream tile. Energetic, polished, welcoming, suitable for a beautiful consulting deck.",
+    "academic-figure-skill": "academic scientific figure creation, expressed as one softly rounded chart panel with three rounded colorful bars and a smooth flowing upward data curve. Luminous aqua and blue with a small warm coral accent, on a very pale ice-blue squircle. The chart feels alive and beautifully composed, with broad soft sculptural strokes."
+  },
+  "style_reference_suffix": "Style reference: the supplied chart icon is ONLY a visual-language reference for satin softness, rounded tile, lighting, framing and dimensionality. Make the NEW subject specified above; do not reproduce the chart icon.",
+  "final_refinement_prompt": "Edit only the outer background tile and its perimeter. IMPORTANT USER CORRECTION: the corner radius is too large. Replace the squircle with a mostly straight-edged SQUARE tile with modest rounded corners of radius exactly about 8 percent of the tile side. The top, bottom, left and right edges should each be straight for about 84 percent of their length. Do not make a circle, pill, superellipse, or heavily rounded squircle. Keep the original inner emblem exactly the same, including its soft flowing lines, rounded object geometry, colors, size, layout, satin-clay and frosted-glass materials, lighting and depth. Keep the pale tile color. Tile centered, equal clean transparent margin around all four sides, outer tile about 90 percent canvas width. Remove stray wisps, speckles or noisy alpha artifacts around the perimeter; use a smooth, clean tile silhouette. Fresh, bright, lively and beautiful. Square PNG, true transparent outside tile. No text, lettering, watermark or new decorations. One final standalone production icon.",
+  "final_sources": {
+    "academic-figure-skill": "exec-dd241d8c-7828-47ed-94ed-04cc1c1f3a43.png",
+    "academic-research-skills": "exec-c7cea207-4c9a-4efd-b7f7-5b764dd20ce3.png",
+    "academic-research-suite": "exec-498cbd0b-f290-4f3e-9ced-c0b49ef9ab38.png",
+    "nature-skills": "exec-134fd27a-5876-4528-8b9d-16f2a03b5ee0.png",
+    "paper-spine": "exec-cabc3dbd-7475-4410-bcce-588f07c686a8.png",
+    "research-writing-assistant": "exec-136188a1-6f76-4462-a02d-2a7955e4336e.png",
+    "rw-consulting-ppt": "exec-a0ebacf2-06c2-4afd-967f-aee4aeee366e.png"
+  }
+}

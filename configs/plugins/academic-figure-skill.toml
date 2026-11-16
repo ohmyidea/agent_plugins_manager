@@ -1,0 +1,70 @@
+[plugins.academic-figure-skill]
+repo = "https://github.com/TingxiYu/academic-figure-skill.git"
+branch = "main"
+commit = "1df9940dd01ac939f072b12fe28d6353b79b90f9"
+
+[plugins.academic-figure-skill.rules]
+icon = "config:../icons/academic-figure-skill.png"
+layout = "selective"
+required = [
+    "skills/academic-figure-skill/SKILL.md",
+    "skills/academic-figure-skill/references/checklist.md",
+    "skills/academic-figure-skill/references/directory-map.md",
+    "skills/academic-figure-skill/references/figure-contract.md",
+    "skills/academic-figure-skill/references/typography.md",
+    "skills/academic-figure-skill/references/color-palettes.md",
+    "skills/academic-figure-skill/references/export-specs.md",
+    "skills/academic-figure-skill/references/journal-specs.md",
+    "skills/academic-figure-skill/assets/figures",
+    "skills/academic-figure-skill/scripts/compose.py",
+    "skills/academic-figure-skill/scripts/qa_validator.py",
+    "skills/academic-figure-skill/scripts/check_figure.py",
+    "skills/academic-figure-skill/scripts/check_colors.py",
+    "skills/academic-figure-skill/scripts/check_dimensions.py",
+    "skills/academic-figure-skill/scripts/check_export.py",
+    "skills/academic-figure-skill/scripts/check_fontsize.py",
+]
+operations = [
+    # Keep the entry point and its dependencies together so relative paths still work.
+    { action = "copy", from = "SKILL.md", to = "skills/academic-figure-skill/SKILL.md" },
+    { action = "copy", from = "references", to = "skills/academic-figure-skill/references" },
+    # Companion previews are required by the visual adaptation workflow.
+    # The separate README gallery in assets/figure-atlas is not needed at runtime.
+    { action = "copy", from = "assets/figures", to = "skills/academic-figure-skill/assets/figures" },
+    # Runtime composition and figure QA only; omit benchmarks, audits and generators.
+    { action = "copy", from = "scripts/compose.py", to = "skills/academic-figure-skill/scripts/compose.py" },
+    { action = "copy", from = "scripts/qa_validator.py", to = "skills/academic-figure-skill/scripts/qa_validator.py" },
+    { action = "copy", from = "scripts/check_figure.py", to = "skills/academic-figure-skill/scripts/check_figure.py" },
+    { action = "copy", from = "scripts/check_colors.py", to = "skills/academic-figure-skill/scripts/check_colors.py" },
+    { action = "copy", from = "scripts/check_dimensions.py", to = "skills/academic-figure-skill/scripts/check_dimensions.py" },
+    { action = "copy", from = "scripts/check_export.py", to = "skills/academic-figure-skill/scripts/check_export.py" },
+    { action = "copy", from = "scripts/check_fontsize.py", to = "skills/academic-figure-skill/scripts/check_fontsize.py" },
+    # Upstream's plain YAML description contains ': '; use a folded scalar.
+    { action = "replace_regex", paths = ["skills/academic-figure-skill/SKILL.md"], old = '(?m)^description: ([^\r\n]+)\r?$', new = 'description: >-\n  \1' },
+    # Plugin manifests handle discovery; omit instructions for unshipped development tools and adapters.
+    { action = "replace_regex", paths = ["skills/academic-figure-skill/SKILL.md"], old = '(?ms)^## Eval & Quality Tracking\r?\n.*?(?=^## References\r?$)', new = "" },
+    { action = "replace", path = "skills/academic-figure-skill/references/checklist.md", old = "academic-figure-skill/scripts/", new = "scripts/" },
+]
+
+[plugins.academic-figure-skill.metadata]
+version = "git+1df9940"
+description = "Publication-grade scientific figures for Nature, Cell and Science journals, with Python/R production assets, multi-panel composition and figure QA."
+author = { name = "TingxiYu", url = "https://github.com/TingxiYu" }
+homepage = "https://github.com/TingxiYu/academic-figure-skill"
+repository = "https://github.com/TingxiYu/academic-figure-skill"
+# Use the actual LICENSE file; the upstream README incorrectly labels it MIT.
+license = "Apache-2.0"
+keywords = ["academic", "research", "figure", "visualization", "publication", "python", "r"]
+
+[plugins.academic-figure-skill.metadata.claude]
+displayName = "Academic Figure Skill"
+
+[plugins.academic-figure-skill.metadata.codex]
+manifest.interface.displayName = "Academic Figure Skill"
+manifest.interface.shortDescription = "Publication-grade figures"
+manifest.interface.longDescription = "Create, refine, review and export scientific figures with journal typography and color standards, Python/R production scripts, multi-panel layouts and quality checks."
+manifest.interface.websiteURL = "https://github.com/TingxiYu/academic-figure-skill"
+
+[plugins.academic-figure-skill.metadata.copilot]
+marketplace.category = "Research"
+marketplace.tags = ["research", "visualization"]

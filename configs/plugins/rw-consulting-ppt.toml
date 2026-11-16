@@ -1,0 +1,58 @@
+[plugins.rw-consulting-ppt]
+repo = "https://github.com/Pikapika260214/rw-consulting-ppt.git"
+branch = "main"
+commit = "ea305de40577a7aae01f6823d5ac8bcdb210c10c"
+
+[plugins.rw-consulting-ppt.rules]
+icon = "config:../icons/rw-consulting-ppt.png"
+layout = "selective"
+required = [
+    "requirements.txt",
+    "skills/rw-consulting-ppt/SKILL.md",
+    "skills/rw-consulting-ppt/agents/openai.yaml",
+    "skills/rw-consulting-ppt/references/concept-image-director.md",
+    "skills/rw-consulting-ppt/references/image-only-output-contract.md",
+    "skills/rw-consulting-ppt/scripts/package_image_deck.py",
+    "skills/astralow-for-editable-ppt/SKILL.md",
+    "skills/astralow-for-editable-ppt/agents/openai.yaml",
+    "skills/astralow-for-editable-ppt/references/tools.md",
+    "skills/astralow-for-editable-ppt/references/quality.md",
+    "skills/astralow-for-editable-ppt/requirements.txt",
+    "skills/astralow-for-editable-ppt/scripts/editable_ppt.py",
+    "skills/astralow-for-editable-ppt/scripts/render-powerpoint.ps1",
+    "skills/astralow-for-editable-ppt/scripts/verify-edit.ps1",
+]
+operations = [
+    # Keep both independent skills, their agent metadata, references and runtime scripts.
+    { action = "copy", from = "skills", to = "skills" },
+    # These images are README illustrations, contact QR codes and completed demo decks.
+    # Runtime instructions use the text-only lessons in references/example-lessons.md.
+    { action = "remove", paths = [
+        "skills/rw-consulting-ppt/assets",
+        "skills/rw-consulting-ppt/examples",
+    ] },
+    # Keep installable dependency lists and the upstream license; omit release documentation.
+    { action = "copy", from = "requirements.txt", to = "requirements.txt" },
+]
+
+[plugins.rw-consulting-ppt.metadata]
+version = "git+ea305de"
+description = "Consulting presentation workflows: turn research and rough notes into full-slide images and image-only PPTX, or rebuild slide images as editable PowerPoint."
+author = { name = "Pikapika260214", url = "https://github.com/Pikapika260214" }
+homepage = "https://github.com/Pikapika260214/rw-consulting-ppt"
+repository = "https://github.com/Pikapika260214/rw-consulting-ppt"
+license = "MIT"
+keywords = ["consulting", "presentation", "powerpoint", "pptx", "image-generation", "editable-ppt"]
+
+[plugins.rw-consulting-ppt.metadata.claude]
+displayName = "RW Consulting PPT"
+
+[plugins.rw-consulting-ppt.metadata.codex]
+manifest.interface.displayName = "RW Consulting PPT"
+manifest.interface.shortDescription = "Consulting decks and edits"
+manifest.interface.longDescription = "Build image-only consulting decks from research, notes and outlines with storyline, slide briefs and sample review. Includes a separate skill for reconstructing slide images as editable PPTX, with PowerPoint rendering and edit verification tools."
+manifest.interface.websiteURL = "https://github.com/Pikapika260214/rw-consulting-ppt"
+
+[plugins.rw-consulting-ppt.metadata.copilot]
+marketplace.category = "Productivity"
+marketplace.tags = ["presentation", "consulting", "powerpoint"]

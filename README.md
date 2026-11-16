@@ -45,7 +45,7 @@ icon = "config:../icons/example.png"
 
 配置图标后，工具在 Codex 和 Claude Code 的插件根目录下写入 `assets/icon.png`，并在生成或合并清单时填写 Codex 的 `interface.logo`、`interface.composerIcon` 或 Claude Code 的 `icon`。只生成 Copilot 清单的插件会跳过图标。PNG 上限为 5 MiB，读取失败会中止当前插件的发布。
 
-默认配方从项目的 `configs/icons/` 读取图标，图形来源和许可见 [Lucide 许可](configs/icons/LICENSE-Lucide.txt)。
+默认配方从项目的 `configs/icons/` 读取图标，当前图标的设计与来源见 [图标说明](configs/icons/README.md)。
 
 ## 默认配方
 
